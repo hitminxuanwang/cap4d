@@ -19,4 +19,4 @@ Official repository for the paper
 ```
 
 ## Acknowledgement
-This work was developed in collaboration with and with sponsorship from LG Electronics. We gratefully acknowledge their support and contributions throughout the course of this project.
+This work was developed in collaboration with and with sponsorship from **LG Electronics**. We gratefully acknowledge their support and contributions throughout the course of this project.
