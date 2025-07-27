@@ -1,0 +1,9 @@
+torch
+torchvision
+omegaconf
+pytorch-lightning
+einops
+opencv-python
+decord
+scipy
+chumpy
