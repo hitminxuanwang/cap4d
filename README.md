@@ -45,7 +45,7 @@ python cap4d/inference/generate_images.py --config_path configs/generation/debug
 
 # Generate images with single reference image
 python cap4d/inference/generate_images.py --config_path configs/generation/single_ref.yaml --reference_data_path examples/input/lincoln/ --output_path examples/output/lincoln/
-python cap4d/inference/generate_images.py --config_path configs/generation/debug.yaml --reference_data_path examples/input/tesla/ --output_path examples/output/tesla
+python cap4d/inference/generate_images.py --config_path configs/generation/single_ref.yaml --reference_data_path examples/input/tesla/ --output_path examples/output/tesla
 
 # Generate images with multiple reference images
 python cap4d/inference/generate_images.py --config_path configs/generation/multi_ref.yaml --reference_data_path examples/input/felix/ --output_path examples/output/felix/
