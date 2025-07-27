@@ -84,4 +84,3 @@ Awesome concurrent work:
 
 ## Acknowledgement
 This work was developed in collaboration with and with sponsorship from **LG Electronics**. We gratefully acknowledge their support and contributions throughout the course of this project.
-
