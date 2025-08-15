@@ -56,6 +56,10 @@ class CAP4DFlameSkinner(FlameSkinner):
             eye_rot (N_t, 3)
             jaw_rot (N_t, 3)
             neck_rot (N_t, 3)
+        vert_mask: torch.Tensor (N_v)
+            If given, will apply a vertex mask to save computation time.
+
+        output: verts (N_t, V, 3)
         """
         shape_offsets = self._get_shape_offsets(flame_sequence["shape"][None], None)
         shape_verts = self._get_template_vertices(None) + shape_offsets
@@ -86,14 +90,9 @@ class CAP4DFlameSkinner(FlameSkinner):
             offsets = torch.cat([offsets, torch.zeros_like(mouth_verts)], dim=1)
             v_transforms = torch.cat([v_transforms, torch.zeros(mouth_verts.shape[0], mouth_verts.shape[1], 4, 4, device=v_transforms.device)], dim=1)
         if self.add_lower_jaw:
-            if not "jaw_rot" in flame_sequence and flame_sequence["jaw_rot"] is not None:
-                jaw_rot = einops.einsum(flame_sequence["expr"], self.jaw_regressor, 'b exp, exp r -> b r')
-            else:
-                jaw_rot = flame_sequence["jaw_rot"]
+            jaw_rot = einops.einsum(flame_sequence["expr"], self.jaw_regressor, 'b exp, exp r -> b r')
             neutral_jaw_verts = self.lower_jaw(shape_verts, self.joint_regressor, batch_rodrigues(jaw_rot * 0.))
-            # neutral_jaw_verts = neutral_jaw_verts.repeat(verts.shape[0], 1, 1)
             jaw_verts = self.lower_jaw(shape_verts, self.joint_regressor, batch_rodrigues(jaw_rot))
-            # jaw_verts = jaw_verts.repeat(verts.shape[0], 1, 1)
             verts = torch.cat([verts, jaw_verts], dim=1)
             offsets = torch.cat([offsets, jaw_verts - neutral_jaw_verts], dim=1)
             jaw_transforms = torch.zeros(jaw_verts.shape[0], 4, 4, device=v_transforms.device)
@@ -167,4 +166,3 @@ def compute_flame(
         "verts_2d": verts_2d.cpu().numpy(),
         "offsets_3d": offsets_3d.cpu().numpy(),
     }
-

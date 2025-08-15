@@ -186,6 +186,24 @@ def load_camera_rays(
     return d  # ray directions
 
 
+def adjust_intrinsics_crop(fx, fy, cx, cy, bbox, target_resolution):
+    scale = target_resolution / (bbox[2] - bbox[0])
+    new_fx = fx * scale
+    new_fy = fy * scale
+    new_cx = (cx - bbox[0]) * scale
+    new_cy = (cy - bbox[1]) * scale
+
+    return new_fx, new_fy, new_cx, new_cy
+
+
+def get_crop_mask(orig_resolution, target_resolution, crop_box):
+    crop_mask = np.ones((orig_resolution))
+    crop_mask = crop_image(crop_mask, crop_box, bg_value=0)
+    crop_mask = rescale_image(crop_mask, target_resolution)
+
+    return crop_mask
+
+
 class FrameReader:
     def __init__(self, video_path):
         self.frame_list = sorted(list(Path(video_path).glob("*.*")))

@@ -1,6 +1,5 @@
 # Blender 4.1.1
 # www.blender.org
-mtllib ff_flame_template.mtl
 o test_template
 v 0.059796 -0.010001 -0.048005
 v 0.063718 -0.010996 -0.047100
