@@ -9,11 +9,7 @@ Official repository for the paper
 
 <a href='https://arxiv.org/abs/2412.12093'><img src='https://img.shields.io/badge/arXiv-2301.02379-red'></a> <a href='https://felixtaubner.github.io/cap4d/'><img src='https://img.shields.io/badge/project page-CAP4D-Green'></a> <a href='#citation'><img src='https://img.shields.io/badge/cite-blue'></a>
 
-<div style="display: flex; align-items: center; gap: 20px; margin-bottom:20px">
-  <img src="assets/felix_reference_imgs.webp" height="200" alt="Reference images"/>
-  <span style="font-size: 2rem;">➡️</span>
-  <video src="assets/felix_live_viewer.mp4" height="250" autoplay loop muted></video>
-</div>
+![Preview](assets/banner.gif)
 
 TL;DR: CAP4D turns any number of reference images into an animatable avatar. 
 
