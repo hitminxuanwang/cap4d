@@ -65,7 +65,7 @@ def training(
             print("WARNING: No valid checkpoint found in ", model_path)
         else:
             print("Loading trained model at iteration {}".format(loaded_iter))
-            (model_weights, first_iter) = torch.load(chkpt_path)
+            (model_weights, first_iter) = torch.load(chkpt_path, weights_only=False)
             gaussians.restore(model_weights, opt_params)
     
     lpips = LPIPS('vgg').cuda()

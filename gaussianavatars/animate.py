@@ -98,7 +98,7 @@ def render_sequence(args):
 
     assert loaded_iter is not None, f"No valid checkpoint found in {model_path}"
     print("Loading trained model at iteration {}".format(loaded_iter))
-    (model_weights, first_iter) = torch.load(chkpt_path)
+    (model_weights, first_iter) = torch.load(chkpt_path, weights_only=False)
     gaussians.restore(model_weights)
 
     bg_color = [1, 1, 1]  # force white background
