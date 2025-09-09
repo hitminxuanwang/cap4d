@@ -68,7 +68,6 @@ def render(
     if meta["means2d"].requires_grad:
         meta["means2d"].retain_grad()
 
-    import pdb; pdb.set_trace()
     # making this compatible with older versions of gsplat where ndim of radii = 2
     if meta["radii"].ndim == 3:
         visibility_filter = (meta["radii"][0] > 0).all(dim=-1)
