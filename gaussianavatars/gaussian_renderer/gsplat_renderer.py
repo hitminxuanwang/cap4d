@@ -65,17 +65,24 @@ def render(
         depth_image = rgb_image[[3]]
         rgb_image = rgb_image[:3]
 
-    # print(meta["means2d"].shape)
-    # print(meta["radii"].shape)
     if meta["means2d"].requires_grad:
         meta["means2d"].retain_grad()
+
+    import pdb; pdb.set_trace()
+    # making this compatible with older versions of gsplat where ndim of radii = 2
+    if meta["radii"].ndim == 3:
+        visibility_filter = (meta["radii"][0] > 0).all(dim=-1)
+        radii = meta["radii"][0].float().norm(dim=-1)
+    else:
+        visibility_filter = meta["radii"][0] > 0
+        radii = meta["radii"][0]
 
     return {
         "render": rgb_image,
         "alpha": alphas[0].permute(2, 0, 1),
         "viewspace_points": meta["means2d"],
-        "visibility_filter" : meta["radii"][0] > 0,
-        "radii": meta["radii"][0],
+        "visibility_filter": visibility_filter,
+        "radii": radii,
         "depth": depth_image,
     }
 
