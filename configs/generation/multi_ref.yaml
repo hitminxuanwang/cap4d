@@ -12,4 +12,4 @@ generation_data:
   yaw_range: 55
   pitch_range: 20
   expr_factor: 1.0
-  n_samples: 840
+  n_samples: 80

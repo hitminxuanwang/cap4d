@@ -183,7 +183,7 @@ class VertexShader(nn.Module):
             max_faces_per_bin=None,
             clip_barycentric_coords=True,
             perspective_correct=cameras is not None,
-            cull_backfaces=True,
+            cull_backfaces=False,
             z_clip_value=z_clip,
             cull_to_frustum=False,
         )

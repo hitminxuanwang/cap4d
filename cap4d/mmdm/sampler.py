@@ -104,6 +104,7 @@ class StochasticIOSampler(object):
         n_all_ref = next(iter(ref_cond.items()))[1].shape[0]
         R = min(n_all_ref, R_max)
 
+
         assert n_gen % (V - R) == 0, f"number of generated images ({n_gen}) has to be divisible by G ({V-R})"  # has to be divisible for now
         n_its = n_gen // (V - R)
 

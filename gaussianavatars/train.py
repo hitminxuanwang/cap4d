@@ -20,7 +20,7 @@ import torch.nn.functional as F
 
 from gaussianavatars.utils.system_utils import searchForMaxIteration
 from gaussianavatars.gaussian_renderer.gsplat_renderer import render
-from gaussianavatars.scene.cap4d_gaussian_model import CAP4DGaussianModel
+from gaussianavatars.scene.cap4d_gaussian_model import CAP4DGaussianModel, SMPLGaussianModel
 from gaussianavatars.scene.scene import Scene
 from gaussianavatars.utils.loss_utils import l1_loss, ssim
 from gaussianavatars.utils.general_utils import safe_state
@@ -31,6 +31,13 @@ try:
     TENSORBOARD_FOUND = True
 except ImportError:
     TENSORBOARD_FOUND = False
+
+
+
+from PIL import Image
+import numpy as np
+import os
+
 
 
 def training(
@@ -50,6 +57,9 @@ def training(
         print("Tensorboard not available: not logging progress")
     
     gaussians = CAP4DGaussianModel(model_params)
+
+    smpl_guassians = SMPLGaussianModel(model_params)
+
     
     scene = Scene(
         model_path=model_path, 
@@ -57,6 +67,16 @@ def training(
         gaussians=gaussians,
     )
     gaussians.training_setup(opt_params)
+
+    camera = scene.getTrainCameras()[0]
+    gaussians.select_mesh_by_timestep(camera.timestep)
+    background = torch.tensor([1, 1, 1], dtype=torch.float32, device="cuda")
+
+    render_out = render(camera, gaussians, background)
+    image = render_out["render"].clamp(0.0, 1.0).detach().permute(1, 2, 0).cpu().numpy()*255.0
+    Image.fromarray(image.astype(np.uint8)).save(os.path.join(model_path, "init_render.png"))
+
+
 
     # if prompted and if it exists, load existing checkpoint
     if load_existing_checkpoint:

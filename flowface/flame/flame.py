@@ -150,6 +150,7 @@ class FlameSkinner(torch.nn.Module):
         shape_params: torch.Tensor, # float32 (B, n_shape_params)
         vert_mask: torch.Tensor = None,
     ) -> torch.Tensor:
+        #print("Shape:", shape_params.shape[1], self.n_shape_params)
         assert shape_params.shape[1] == self.n_shape_params
 
         if vert_mask is not None:

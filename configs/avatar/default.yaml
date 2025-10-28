@@ -1,5 +1,5 @@
 opt_params:
-  iterations: 100_000
+  iterations: 1_00000
 
   sh_warmup_iterations: 1_000
 
@@ -32,8 +32,10 @@ opt_params:
   
   w_lpips: 0.1
   lambda_lpips_end: 0.9
-  lpips_linear_start: 10_000
-  lpips_linear_end: 60_000
+  #lpips_linear_start: 1_0000
+  #lpips_linear_end: 6_0000
+  lpips_linear_start: 1_0000
+  lpips_linear_end: 6_0000
   deform_net_w_decay: 2e-3
   deform_net_lr_init: 1e-5
   deform_net_lr_final: 1e-7
@@ -58,7 +60,7 @@ model_params:
   use_glasses: True
   gaussian_init_type: "scaled"
   use_expr_mask: True
-  uv_resolution: 128
+  uv_resolution: 256
   n_gaussians_init: 100_000
 
   sh_degree: 3

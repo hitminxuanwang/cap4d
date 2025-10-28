@@ -47,7 +47,15 @@ class CAP4DInferenceDataset(Dataset):
             flame_item,
         )
         crop_box = get_bbox_from_verts(verts_2d, self.head_vertex_ids)
+
+        #print(crop_box)
+        ##------------TEST--------------##
+        #crop_box =[0, 0, 512, 512]
+        ##------------TEST--------------##
+
         flame_item["crop_box"] = crop_box
+
+
 
         if "img_dir_path" in flame_item:
             # we have images available, load them

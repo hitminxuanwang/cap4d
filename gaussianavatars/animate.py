@@ -170,6 +170,59 @@ def render_sequence(args):
     frames_to_video(render_path, output_path / "renders.mp4", fps=args.fps)
 
 
+
+def render_static(args):
+    model_path = Path(args.model_path)
+    avatar_config = OmegaConf.load(model_path / "config_dump.yaml")
+
+    gaussians = CAP4DGaussianModel(avatar_config["model_params"])
+    gaussians.eval()
+    
+    # For static render, we don't need target animation, but load scene for cameras
+    scene = Scene(
+        source_paths=args.source_paths,
+        model_path=model_path,
+        gaussians=gaussians,
+        shuffle=False,
+    )
+
+    loaded_iter, chkpt_path = searchForMaxIteration(model_path)
+
+    assert loaded_iter is not None, f"No valid checkpoint found in {model_path}"
+    print("Loading trained model at iteration {}".format(loaded_iter))
+    (model_weights, first_iter) = torch.load(chkpt_path, weights_only=False)
+    gaussians.restore(model_weights)
+
+    bg_color = [1, 1, 1]  # force white background
+    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+    output_path = Path(args.output_path)
+    makedirs(output_path, exist_ok=True)
+
+    # Select camera (use test cameras or train, adjust as needed)
+    cameras = scene.getTestCameras() if len(scene.getTestCameras()) > 0 else scene.getTrainCameras()
+    camera = cameras[args.camera_id]
+
+    # Select timestep and mesh
+    if gaussians.binding is not None:
+        gaussians.select_mesh_by_timestep(args.timestep)
+
+    # Render
+    render_out = render(camera, gaussians, background)
+
+    rendering = render_out["render"]
+    image_path = output_path / f"static_render_timestep{args.timestep}_camera{args.camera_id}.png"
+    write_data({image_path: rendering})
+
+    if args.export_ply:
+        ply_writer = PlyWriter(compress=args.compress_ply)
+        ply_writer.update(gaussians)
+        ply_path = output_path / f"static_export_timestep{args.timestep}.ply"
+        print("Exporting static PLY...")
+        ply_writer.save_ply(ply_path)
+
+
+
 if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Render the reconstructed avatar with a " \
@@ -196,6 +249,24 @@ if __name__ == "__main__":
     parser.add_argument("--compress_ply", type=int, default=False, 
                         help="compress baked ply animation at the cost of quality (jittering)")
 
+    parser.add_argument("--render_static", action="store_true", default=False,
+                        help="Render a static image/PLY instead of animation sequence.")
+    parser.add_argument("--timestep", type=int, default=0,
+                        help="Timestep (frame) to use for static render/export.")
+    parser.add_argument("--camera_id", type=int, default=0,
+                        help="Camera index to use for static render (from test/train cameras).")
+    parser.add_argument('--source_paths', type=str, nargs="*", default=None,
+                        help="List of source directories containing images and SMPL parameters for static render.")
+
+    # args = parser.parse_args()
+    # print("Rendering " + args.model_path)
+
+    # # Initialize system state (RNG)
+    # safe_state(args.quiet)
+
+    # with torch.no_grad():
+    #     render_sequence(args)
+
     args = parser.parse_args()
     print("Rendering " + args.model_path)
 
@@ -203,4 +274,8 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     with torch.no_grad():
-        render_sequence(args)
+        if args.render_static:
+            render_static(args)
+        else:
+            assert args.target_animation_path is not None, "target_animation_path required for animation mode."
+            render_sequence(args)

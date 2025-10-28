@@ -129,6 +129,198 @@ def loadCAP4DItem(idx, flame_path, image_path):
     return cam_info, flame_out
 
 
+
+def convert_cam_to_3d_trans(cams, weight=1.4):
+    # Handle both 1D and 2D inputs
+    original_ndim = cams.ndim
+    if not isinstance(cams, torch.Tensor):
+        cams = torch.from_numpy(cams)
+    
+    if cams.ndim == 1:
+        cams = cams.unsqueeze(0)  # Use unsqueeze instead of reshape for clarity
+    
+    s = cams[:, 0]
+    tx = cams[:, 1]
+    ty = cams[:, 2]
+    depth = 1. / s
+    dx = tx / s
+    dy = ty / s
+    trans3d = torch.stack([dx, dy, depth], dim=1) * weight
+    
+    # If original was 1D, squeeze back to (3,)
+    if original_ndim == 1:
+        trans3d = trans3d.squeeze(0)
+    
+    return trans3d
+
+
+def loadSMPLItem(idx, smpl_path, image_path):
+    smpl_item = dict(np.load(smpl_path))
+
+    # we are loading cropped images
+    with Image.open(image_path) as img_file:
+        image = img_file.copy()
+
+    crop_width, crop_height = image.size
+
+    #print(image.size)
+
+    bg = np.array([1, 1, 1])
+
+    orig_resolution = np.array([crop_height, crop_width])
+
+    crop_box = None
+
+    # Load intrinsics directly from NPZ (new export format)
+    fx = smpl_item["fx"]
+    fy = smpl_item["fy"]
+    cx = smpl_item["cx"]
+    cy = smpl_item["cy"]
+
+    # if the image is cropped, get outcropping mask (unchanged)
+    crop_mask = np.ones((crop_height, crop_width), dtype=bool)
+
+    # Load extrinsics from R and T (new export format)
+    rot = smpl_item["R"]  # 3x3 rotation matrix
+    tra = smpl_item["T"].squeeze()  # 3x1 translation vector, flattened to 3-element array
+
+    extr = np.eye(4)
+    extr[:3, :3] = rot  # Set rotation part
+    extr[:3, 3] = tra   # Set translation part
+
+
+    # z_flip = np.array([[1, 0, 0], [0, 1, 0], [0, 0, -1]])
+
+    # extr[:3, :3] = z_flip @ extr[:3, :3]
+
+    # extr[:3, 3] = (z_flip @ extr[:3, 3].reshape(3, 1)).squeeze()
+
+    intrinsics = np.array(
+        [[fx, 0, cx],
+         [0, fy, cy],
+         [0, 0, 1]],
+    )
+
+    global_orient = smpl_item["global_orient"]  # (3,) axis-angle vector
+    body_pose = smpl_item["body_pose"]          # (69,) axis-angle vector
+    thetas = np.concatenate([global_orient, body_pose])  # Full 72-dim pose vector
+
+    smpl_out = {
+        "betas": smpl_item["betas"],
+        "thetas": thetas, 
+        "global_orient": global_orient,
+        "body_pose": body_pose,
+        "transl": tra,  # Use loaded tra as transl (aligned with new cam_trans)
+        "rot": rot,
+        "tra": tra,
+    }
+
+    cam_info = CVCameraInfo(
+        rt=extr,
+        intrinsics=intrinsics,
+        uid=idx, 
+        bg=bg, 
+        image=image, 
+        image_path=image_path, 
+        image_name=image_path.stem, 
+        width=crop_width, 
+        height=crop_height, 
+        timestep=idx, 
+        camera_id=idx,
+        mask=crop_mask,
+    )
+
+    return cam_info, smpl_out
+
+
+def loadSMPLItemOld(idx, smpl_path, image_path):
+    smpl_item = dict(np.load(smpl_path))
+
+    # we are loading cropped images
+    with Image.open(image_path) as img_file:
+        image = img_file.copy()
+
+    crop_width, crop_height = image.size
+
+    bg = np.array([1, 1, 1])
+
+    orig_resolution = np.array([crop_height, crop_width])
+
+    crop_box = None
+
+    #print("orig_resolution", orig_resolution)
+
+    focal_length = np.sqrt(crop_width**2 + crop_height**2)  
+    fx, fy = focal_length, focal_length
+    cx, cy = crop_width / 2.0, crop_height / 2.0
+
+
+
+    # if the image is cropped, get outcropping mask
+    crop_mask = np.ones((crop_height, crop_width), dtype=bool)
+
+    cam = smpl_item["cam"]
+    #print("SMPL cam:", cam)
+    tra = convert_cam_to_3d_trans(cam)
+    tra[1]  -= 0.20
+    tra[0] += 0.035 
+    #tra[1] = 0.0  
+    #tra[2] = -tra[2]
+    # s, tx, ty = cam[0], cam[1], cam[2]
+    # depth = 5.0  
+    # tra = np.array([tx, ty, depth])  
+    rot = np.eye(3)  
+
+    #from scipy.spatial.transform import Rotation as R
+    #flip_rot = R.from_euler('x', 180, degrees=True).as_matrix()  # [[1,0,0],[0,-1,0],[0,0,-1]]
+    #rot = flip_rot @ np.eye(3)  
+
+    extr = np.eye(4)  
+    extr[:3, :3] = rot  # Set rotation part
+    extr[:3, 3] = tra   # Set translation part
+    #extr[:3,:3] =[[1,0,0],[0,1,0],[0,0,-1]] #@ extr[:3,:3]  # Flip the z-axis
+    #extr[:3, 2] = [0, 0, -1]
+
+    intrinsics = np.array(
+        [[fx, 0, cx],
+         [0, fy, cy],
+         [0, 0, 1]],
+    )
+
+
+    global_orient = smpl_item["global_orient"]
+    body_pose = smpl_item["body_pose"]
+    thetas = np.concatenate([global_orient, body_pose])  # (72,) full pose
+    smpl_out = {
+        "betas": smpl_item["betas"],
+        "thetas": thetas, 
+        "global_orient": global_orient,
+        "body_pose": body_pose,
+        "transl": np.zeros(3),  
+        "rot": rot,
+        "tra": tra,
+    }
+
+    cam_info = CVCameraInfo(
+        rt=extr,
+        intrinsics=intrinsics,
+        uid=idx, 
+        bg=bg, 
+        image=image, 
+        image_path=image_path, 
+        image_name=image_path.stem, 
+        width=crop_width, 
+        height=crop_height, 
+        timestep=idx, 
+        camera_id=idx,
+        mask=crop_mask,
+    )
+
+    return cam_info, smpl_out
+
+
+
+
 def readCAP4DImageSet(path: Path, cam_id_offset=0):
     flame_paths = sorted(list((path / "flame").glob("*.npz")))
     img_paths = sorted(list((path / "images").glob("*.*")))
@@ -136,6 +328,11 @@ def readCAP4DImageSet(path: Path, cam_id_offset=0):
     cameras = []
     meshes = []
     
+    #print(len(flame_paths),len(img_paths))
+    #print("FLAME_PATH", flame_paths)
+    #print("IMG", img_paths)
+    print("FLAME PATHS:", len(flame_paths))
+    print("IMG PATHS:", len(img_paths))
     assert len(flame_paths) > 0 and len(img_paths) == len(flame_paths)
 
     for frame_id in tqdm(range(len(flame_paths))):        
@@ -144,6 +341,39 @@ def readCAP4DImageSet(path: Path, cam_id_offset=0):
             flame_paths[frame_id], 
             img_paths[frame_id], 
         )
+        cameras.append(camera)
+        meshes.append(mesh)
+
+    return cameras, meshes
+
+
+def readSMPLImageSet(path: Path, cam_id_offset=0):
+    smpl_paths = sorted(list((path / "smpl").glob("*.npz")))
+    img_paths = sorted(list((path / "images").glob("*.*")))
+    
+    cameras = []
+    meshes = []
+    
+    #print(len(smpl_paths),len(img_paths))
+    #print("SMPL_PATH", smpl_paths)
+    #print("IMG", img_paths)
+    print("FLAME PATHS:", len(smpl_paths))
+    print("IMG PATHS:", len(img_paths))
+    assert len(smpl_paths) > 0 and len(img_paths) == len(smpl_paths)
+
+    for frame_id in tqdm(range(len(smpl_paths))):        
+        camera, mesh = loadSMPLItem(
+            frame_id + cam_id_offset, 
+            smpl_paths[frame_id], 
+            img_paths[frame_id], 
+        )
+        # print("Loaded camera:", camera.uid, camera.image_name)
+        # print("Camera intrinsics:", camera.intrinsics)
+        # print("Camera rt:", camera.rt)
+        # print("Camera", camera)
+        # print("Mesh body pose :", mesh)
+        #print("Mesh global orient :", mesh)
+
         cameras.append(camera)
         meshes.append(mesh)
 
@@ -226,6 +456,61 @@ def readCAP4DDrivingSequence(paths: Dict[str, Any], cam_id_offset=0):
         cameras.append(cam_info)
 
     return cameras, meshes
+
+def loadSMPLDataset(
+    source_paths, 
+    target_paths: Optional[Dict[str, str]] = None, 
+    val_ratio=0.1,
+    n_max_val_images=10,
+):
+    cameras = []
+    meshes = []
+    if source_paths is not None:
+        for source_path in source_paths:
+            source_path = Path(source_path)
+            assert source_path.exists(), f"Source path does not exist: {source_path}"
+            print(f"Loading dataset from {source_path}")
+            cameras_, meshes_ = readSMPLImageSet(source_path, cam_id_offset=len(cameras))  
+            cameras += cameras_
+            meshes += meshes_
+
+    n_frames = len(cameras)
+    n_val = max(1, min(n_max_val_images, int(n_frames * val_ratio)))
+
+    train_cameras = cameras[:-n_val]
+    train_meshes = meshes
+    val_cameras = cameras[-n_val:]
+
+    print("Number of validation cameras:", len(val_cameras))
+    print("Number of train cameras:", len(train_cameras))
+
+    test_cameras = val_cameras
+    val_cameras = cameras[:n_val]
+    test_meshes = []
+
+    tgt_meshes = []
+    tgt_cameras = []
+
+    # now forbiden the animation
+    # if target_paths is not None:
+    #     tgt_cameras, tgt_meshes = readSMPLDrivingSequence(  
+    #         target_paths, 
+    #         cam_id_offset=len(train_meshes)+len(test_meshes)
+    #     )
+    
+    scene_info = SceneInfo(
+        train_cameras=train_cameras,
+        test_cameras=test_cameras,
+        val_cameras=val_cameras,
+        train_meshes=train_meshes,
+        test_meshes=test_meshes,
+        nerf_normalization={"radius": 2.},
+        ply_path=None,
+        tgt_meshes=tgt_meshes,
+        tgt_cameras=tgt_cameras,
+    )
+
+    return scene_info
 
 
 def loadCAP4DDataset(

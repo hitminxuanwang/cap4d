@@ -58,5 +58,6 @@ class ReferenceDataset(CAP4DInferenceDataset):
             if ref_extr is None:
                 ref_extr = flame_item["extr"]
 
+
         self.ref_extr = ref_extr[0]
         self.flame_list = flame_list

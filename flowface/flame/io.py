@@ -5,6 +5,7 @@ from typing import Any, List, MutableMapping
 import numpy as np
 import torch
 
+import scipy.sparse
 
 def convert_array(
     arr_dict: MutableMapping[str, Any],

@@ -192,3 +192,8 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+/examples/debug_output
+/examples/input
+/examples/output
+/data/weights/mmdm/checkpoints
+data/assets/smpl/SMPL_NEUTRAL.pkl
