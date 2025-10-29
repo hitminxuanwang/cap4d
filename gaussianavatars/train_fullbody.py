@@ -187,6 +187,9 @@ def training(
         if smpl_guassians.binding != None:
             smpl_guassians.select_mesh_by_timestep(viewpoint_cam.timestep)
 
+
+
+        assert smpl_guassians.timestep == viewpoint_cam.timestep
         # Render Gaussians
         render_pkg = render(
             viewpoint_cam, 
@@ -269,14 +272,14 @@ def training(
             else:
                 losses['scale'] = F.relu(torch.exp(smpl_guassians._scaling[visibility_filter]) - opt_params["threshold_scale"]).norm(dim=1).mean() * opt_params["lambda_scale"]
 
-        if opt_params["lambda_laplacian"] != 0:
-            losses['lap'] = smpl_guassians.compute_laplacian_loss() * opt_params["lambda_laplacian"]
+        # if opt_params["lambda_laplacian"] != 0:
+        #     losses['lap'] = smpl_guassians.compute_laplacian_loss() * opt_params["lambda_laplacian"]
 
-        if opt_params["lambda_relative_deform"] != 0:
-            losses['deform'] = smpl_guassians.compute_relative_deformation_loss() * opt_params["lambda_relative_deform"]
+        # if opt_params["lambda_relative_deform"] != 0:
+        #     losses['deform'] = smpl_guassians.compute_relative_deformation_loss() * opt_params["lambda_relative_deform"]
 
-        if opt_params["lambda_relative_rot"] != 0:
-            losses['rot'] = smpl_guassians.compute_relative_rotation_loss() * opt_params["lambda_relative_rot"]
+        # if opt_params["lambda_relative_rot"] != 0:
+        #     losses['rot'] = smpl_guassians.compute_relative_rotation_loss() * opt_params["lambda_relative_rot"]
 
         # if opt_params["lambda_neck"] != 0:
         #     losses['neck'] = smpl_guassians.compute_neck_loss() * opt_params["lambda_neck"]
@@ -286,7 +289,10 @@ def training(
         losses['total'] = sum([v for k, v in losses.items()])
         losses['total'].backward()
 
+
+
         iter_end.record()
+
 
         with torch.no_grad():
             smpl_guassians.eval()
@@ -386,6 +392,45 @@ def training_report(
             {'name': 'val', 'cameras' : scene.getValCameras()},
             {'name': 'test', 'cameras' : scene.getTestCameras()},
         )
+        
+    #     print('Validation on {} configs'.format(len(validation_configs)))
+    #     for config in validation_configs:
+    #         if config['cameras'] and len(config['cameras']) > 0:
+    #             for idx, viewpoint in tqdm(enumerate(DataLoader(config['cameras'], shuffle=False, batch_size=None, num_workers=8)), total=len(config['cameras'])):
+
+    #                 image_name = None
+    #                 print("Num timesteps:", scene.gaussians.num_timesteps)
+    #                 #if scene.gaussians.num_timesteps > 1:
+    #                 image_name = scene.gaussians.select_mesh_by_timestep(viewpoint.timestep)
+
+
+    #                 config_name = config['name']
+    #                 cameras = config['cameras']
+
+    #                 print(viewpoint.image_name, image_name)
+    #                 bg_color = [1, 1, 1]  # force white background
+    #                 background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+    #                 image_val = torch.clamp(renderFunc(viewpoint, scene.gaussians, background)["render"], 0.0, 1.0)
+    #                 gt_image_val = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
+    #                 gt_name = viewpoint.image_name
+    #                 render_name = image_name.stem
+
+    #                 gt_image_cpu_val = (gt_image_val.permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
+    #                 gt_pil_val = Image.fromarray(gt_image_cpu_val)
+    #                 gt_pil_val.save(os.path.join(model_path, f"debug/gt_{config_name}_{gt_name}_{idx}.png"))
+
+
+    #                 if isinstance(image_val, torch.Tensor):
+    #                     render_image_cpu = (image_val.permute(1, 2, 0).cpu().numpy()).astype(np.uint8)
+    #                 else:
+    #                     render_image_cpu = image_val.astype(np.uint8)
+    #                 render_pil = Image.fromarray(render_image_cpu)
+    #                 render_pil.save(os.path.join(model_path, f"debug/render_{config_name}_{render_name}_{idx}.png"))
+
+
+        
+        #return None
+
 
         for config in validation_configs:
             if config['cameras'] and len(config['cameras']) > 0:
@@ -398,8 +443,8 @@ def training_report(
                 gt_image_cache = []
                 vis_ct = 0
                 for idx, viewpoint in tqdm(enumerate(DataLoader(config['cameras'], shuffle=False, batch_size=None, num_workers=8)), total=len(config['cameras'])):
-                    if scene.gaussians.num_timesteps > 1:
-                        scene.gaussians.select_mesh_by_timestep(viewpoint.timestep)
+                    #if scene.gaussians.num_timesteps > 1:
+                    scene.gaussians.select_mesh_by_timestep(viewpoint.timestep)
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, background)["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
                     if tb_writer and (idx % (len(config['cameras'])) // num_vis_img) == 0:
@@ -410,8 +455,9 @@ def training_report(
                             tb_writer.add_images(config['name'] + "_{}/ground_truth".format(vis_ct), gt_image[None], global_step=iteration)
                         
                         # Visualize U-Net expression dependent deformation (manually normalized)
-                        deform = scene.gaussians.deform_output / 0.0108 / 2. + 0.5
-                        tb_writer.add_images(config['name'] + f"_{vis_ct}/deform", deform, global_step=iteration)
+                        if scene.gaussians.enable_deform_net:
+                            deform = scene.gaussians.deform_output / 0.0108 / 2. + 0.5
+                            tb_writer.add_images(config['name'] + f"_{vis_ct}/deform", deform, global_step=iteration)
 
                         vis_ct += 1
                     
@@ -460,7 +506,7 @@ if __name__ == "__main__":
                         help="Extra testing iterations (for visualization).")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
-    parser.add_argument("--load_existing_checkpoint", type=int, default=None,
+    parser.add_argument("--load_existing_checkpoint", type=int, default=True,
                         help="Whether to load existing (newest) checkpoint in model_path")
     parser.add_argument("--config_path", type=str, default = None)
     args = parser.parse_args()

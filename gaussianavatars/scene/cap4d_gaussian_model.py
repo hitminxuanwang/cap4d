@@ -494,7 +494,7 @@ class SMPLGaussianModel(GaussianModel):
         self.use_expr_mask = model_params.get("use_expr_mask", False)  # Optional for SMPL
 
 
-        self.enable_deform_net = True
+        self.enable_deform_net = False
 
 
         n_pos_enc = 12
@@ -647,6 +647,13 @@ class SMPLGaussianModel(GaussianModel):
             'tra': torch.zeros([T, 3]),
         }
 
+        names = []
+        for i, mesh in enumerate(meshes):
+            names.append(mesh.get('name', f'mesh_{i}'))  # Default to 'mesh_i' if not present
+
+        # Add names to smpl_param as a list (not a Tensor, since names are strings)
+        self.smpl_param['name'] = names
+
         if not self.static_neck:
             self.neck_rot_offset = nn.Embedding(
                 T, 3, sparse=True, _weight=torch.zeros([T, 3])
@@ -660,10 +667,14 @@ class SMPLGaussianModel(GaussianModel):
             if isinstance(tra_value, torch.Tensor):
                 tra_value = tra_value.cpu().numpy()  # Convert Tensor to NumPy
             self.smpl_param['tra'][i] = torch.from_numpy(tra_value)
-
+            #self.smpl_param_name = mesh.get('name', f'mesh_{i}')
 
         for k, v in self.smpl_param.items():
-            self.smpl_param[k] = v.float().cuda()
+            if isinstance(v, torch.Tensor):  # Only move Tensors to CUDA (skip list like 'names')
+                self.smpl_param[k] = v.float().cuda()
+
+        # for k, v in self.smpl_param.items():
+        #     self.smpl_param[k] = v.float().cuda()
 
     def get_bbox_center(self):
         bbox_center = (self.verts.max(dim=1)[0] + self.verts.min(dim=1)[0]) / 2.
@@ -680,19 +691,19 @@ class SMPLGaussianModel(GaussianModel):
         
         base_rot = self.smpl_param["base_rot"][None]
         curr_rot = self.smpl_param["global_orient"][[timestep]]  # Use global_orient for rotation in SMPL
-        relative_rot = roma.rotvec_to_rotmat(curr_rot).inverse() @ roma.rotvec_to_rotmat(base_rot)
-        relative_rot = roma.rotmat_to_rotvec(relative_rot)
+        # relative_rot = roma.rotvec_to_rotmat(curr_rot).inverse() @ roma.rotvec_to_rotmat(base_rot)
+        # relative_rot = roma.rotmat_to_rotvec(relative_rot)
 
-        # limit neck rotation to not break the gaussians (hacky)
-        MAX_NECK_ROT = 0.15
-        relative_rot = torch.tanh(relative_rot / MAX_NECK_ROT) * MAX_NECK_ROT
+        # # limit neck rotation to not break the gaussians (hacky)
+        # MAX_NECK_ROT = 0.15
+        # relative_rot = torch.tanh(relative_rot / MAX_NECK_ROT) * MAX_NECK_ROT
     
-        if not self.static_neck:
-            # allow the neck to rotate during training to correct generated images
-            neck_rot_offset = self.neck_rot_offset(
-                torch.tensor([timestep], dtype=torch.long, device=relative_rot.device)
-            )
-            relative_rot = relative_rot + neck_rot_offset
+        # if not self.static_neck:
+        #     # allow the neck to rotate during training to correct generated images
+        #     neck_rot_offset = self.neck_rot_offset(
+        #         torch.tensor([timestep], dtype=torch.long, device=relative_rot.device)
+        #     )
+        #     relative_rot = relative_rot + neck_rot_offset
 
         body_pose = self.smpl_param['body_pose'][timestep].unsqueeze(0)
         global_orient = self.smpl_param['global_orient'][timestep].unsqueeze(0)
@@ -730,14 +741,15 @@ class SMPLGaussianModel(GaussianModel):
 
 
 
-        neutral_output = self.smpl_model(
-            betas=self.smpl_param["betas"][None],
-            body_pose=torch.zeros_like(self.smpl_param["body_pose"][[timestep]]),
-            global_orient=self.smpl_param["global_orient"][[timestep]],
-            transl=self.smpl_param["tra"][[timestep]],
-        )
-        #neutral_verts = neutral_output.vertices.squeeze(0)
-        neutral_verts = neutral_output.vertices
+        if self.enable_deform_net:
+            neutral_output = self.smpl_model(
+                betas=self.smpl_param["betas"][None],
+                body_pose=torch.zeros_like(self.smpl_param["body_pose"][[timestep]]),
+                global_orient=self.smpl_param["global_orient"][[timestep]],
+                transl=self.smpl_param["tra"][[timestep]],
+            )
+            #neutral_verts = neutral_output.vertices.squeeze(0)
+            neutral_verts = neutral_output.vertices
         #neutral_verts[..., 1] = -neutral_verts[..., 1]
         #neutral_verts[..., 2] = -neutral_verts[..., 2]
 
@@ -753,10 +765,13 @@ class SMPLGaussianModel(GaussianModel):
         # xyz_extend = vertices_max - vertices_min
         # print("Neural XYZ extend in Cap4D:", xyz_extend)
 
-
-        offsets = verts - neutral_verts
+            offsets = verts - neutral_verts
+        else:
+            offsets = torch.zeros_like(verts)
 
         self.update_mesh_properties(verts, offsets)
+
+        return self.smpl_param['name'][timestep]
 
     def uv_remesh_smpl_vertices(self, verts):
         verts_packed = verts[:, self.smpl_faces]
@@ -785,60 +800,105 @@ class SMPLGaussianModel(GaussianModel):
 
         return deform_output, nodeform_output
     
-    def update_mesh_properties(self, verts, offsets):        
-        remeshed_verts = self.uv_remesh_smpl_vertices(verts)
-        remeshed_verts = einops.rearrange(remeshed_verts, 'b h w c -> b (h w) c')
-        remeshed_offsets = self.uv_remesh_smpl_vertices(offsets) / STD_DEFORM
-        remeshed_offsets = einops.rearrange(remeshed_offsets, 'b h w c -> b c h w')
-        
-        deform_output, nodeform_output = self.forward_unet(remeshed_offsets)
-        remeshed_deform = einops.rearrange(deform_output, 'b c h w -> b (h w) c')
-        nodeform_offsets = einops.rearrange(nodeform_output, 'b c h w -> b (h w) c')
+    def update_mesh_properties(self, verts, offsets): 
 
-        self.deform_output = deform_output
-        self.neutral_output = nodeform_output
+        if  self.enable_deform_net:       
+            remeshed_verts = self.uv_remesh_smpl_vertices(verts)
+            remeshed_verts = einops.rearrange(remeshed_verts, 'b h w c -> b (h w) c')
+            remeshed_offsets = self.uv_remesh_smpl_vertices(offsets) / STD_DEFORM
+            remeshed_offsets = einops.rearrange(remeshed_offsets, 'b h w c -> b c h w')
+            
+            deform_output, nodeform_output = self.forward_unet(remeshed_offsets)
+            remeshed_deform = einops.rearrange(deform_output, 'b c h w -> b (h w) c')
+            nodeform_offsets = einops.rearrange(nodeform_output, 'b c h w -> b (h w) c')
 
-        verts = remeshed_verts + remeshed_deform
-        faces = self.uv_remesh_faces
+            self.deform_output = deform_output
+            self.neutral_output = nodeform_output
 
-        nodeform_verts = remeshed_verts + nodeform_offsets
+            verts = remeshed_verts + remeshed_deform
+            faces = self.uv_remesh_faces
 
-        triangles = verts[:, faces]
-        nodeform_triangles = nodeform_verts[:, faces]
+            nodeform_verts = remeshed_verts + nodeform_offsets
 
-        # neutral gaussian deformations
-        nodeform_face_center = nodeform_triangles.mean(dim=-2).squeeze(0)
-        # compute undeformed face orientation and scale (no U-Net deformation)
-        nodeform_face_orien_mat, nodeform_face_scaling = compute_face_orientation(
-            nodeform_verts.squeeze(0), 
-            faces.squeeze(0), 
-            return_scale=True
-        )
-        self.neutral_face_orien_mat = nodeform_face_orien_mat
-        self.xyz_neutral = self.compute_face_xyz_transformed(nodeform_face_center, nodeform_face_orien_mat, nodeform_face_scaling)
+            triangles = verts[:, faces]
+            nodeform_triangles = nodeform_verts[:, faces]
 
-        # position
-        self.face_center = triangles.mean(dim=-2).squeeze(0)
+            # neutral gaussian deformations
+            nodeform_face_center = nodeform_triangles.mean(dim=-2).squeeze(0)
+            # compute undeformed face orientation and scale (no U-Net deformation)
+            nodeform_face_orien_mat, nodeform_face_scaling = compute_face_orientation(
+                nodeform_verts.squeeze(0), 
+                faces.squeeze(0), 
+                return_scale=True
+            )
+            self.neutral_face_orien_mat = nodeform_face_orien_mat
+            self.xyz_neutral = self.compute_face_xyz_transformed(nodeform_face_center, nodeform_face_orien_mat, nodeform_face_scaling)
 
-        # compute deformed face orientation and scale
-        self.face_orien_mat, self.face_scaling = compute_face_orientation(
-            verts.squeeze(0), 
-            faces.squeeze(0), 
-            return_scale=True
-        )
-        self.face_orien_quat = roma.quat_xyzw_to_wxyz(roma.rotmat_to_unitquat(self.face_orien_mat))  # roma
+            # position
+            self.face_center = triangles.mean(dim=-2).squeeze(0)
 
-        # for mesh rendering
-        self.verts = verts
-        self.faces = faces
-        
+            # compute deformed face orientation and scale
+            self.face_orien_mat, self.face_scaling = compute_face_orientation(
+                verts.squeeze(0), 
+                faces.squeeze(0), 
+                return_scale=True
+            )
+            self.face_orien_quat = roma.quat_xyzw_to_wxyz(roma.rotmat_to_unitquat(self.face_orien_mat))  # roma
 
-        # vertices_min = verts[0].cpu().min(dim=0).values.cpu().numpy() if verts.is_cuda else verts[0].min(dim=0).values.numpy()
-        # vertices_max = verts[0].cpu().max(dim=0).values.cpu().numpy() if verts.is_cuda else verts[0].max(dim=0).values.numpy()
-        # xyz_extend = vertices_max - vertices_min
-        # print("Final XYZ extend in Cap4D:", xyz_extend)
-        #debug
-        #self.verts += torch.tensor([0.0, 0.0, 5.0], device=self.verts.device)
+            # for mesh rendering
+            self.verts = verts
+            self.faces = faces
+            
+
+            # vertices_min = verts[0].cpu().min(dim=0).values.cpu().numpy() if verts.is_cuda else verts[0].min(dim=0).values.numpy()
+            # vertices_max = verts[0].cpu().max(dim=0).values.cpu().numpy() if verts.is_cuda else verts[0].max(dim=0).values.numpy()
+            # xyz_extend = vertices_max - vertices_min
+            # print("Final XYZ extend in Cap4D:", xyz_extend)
+            #debug
+            #self.verts += torch.tensor([0.0, 0.0, 5.0], device=self.verts.device)
+        else:
+            
+            remeshed_verts = self.uv_remesh_smpl_vertices(verts)
+            remeshed_verts = einops.rearrange(remeshed_verts, 'b h w c -> b (h w) c')
+
+            verts = remeshed_verts
+            faces = self.uv_remesh_faces
+
+            # Since no U-Net, treat nodeform_verts as identical to verts (no additional offsets)
+            nodeform_verts = remeshed_verts
+
+            triangles = verts[:, faces]
+            nodeform_triangles = nodeform_verts[:, faces]
+
+            # neutral gaussian deformations (using nodeform as base since no deformation)
+            nodeform_face_center = nodeform_triangles.mean(dim=-2).squeeze(0)
+            # compute undeformed face orientation and scale
+            nodeform_face_orien_mat, nodeform_face_scaling = compute_face_orientation(
+                nodeform_verts.squeeze(0), 
+                faces.squeeze(0), 
+                return_scale=True
+            )
+            self.neutral_face_orien_mat = nodeform_face_orien_mat
+            self.xyz_neutral = self.compute_face_xyz_transformed(nodeform_face_center, nodeform_face_orien_mat, nodeform_face_scaling)
+
+            # position
+            self.face_center = triangles.mean(dim=-2).squeeze(0)
+
+            # compute deformed face orientation and scale (deformed is same as neutral here)
+            self.face_orien_mat, self.face_scaling = compute_face_orientation(
+                verts.squeeze(0), 
+                faces.squeeze(0), 
+                return_scale=True
+            )
+            self.face_orien_quat = roma.quat_xyzw_to_wxyz(roma.rotmat_to_unitquat(self.face_orien_mat))  # roma
+
+            # Optionally set U-Net related outputs to None or zeros if needed elsewhere
+            self.deform_output = None
+            self.neutral_output = None
+
+            # for mesh rendering
+            self.verts = verts
+            self.faces = faces
 
     
     def compute_laplacian_loss(self):

@@ -213,6 +213,7 @@ def loadSMPLItem(idx, smpl_path, image_path):
         "transl": tra,  # Use loaded tra as transl (aligned with new cam_trans)
         "rot": rot,
         "tra": tra,
+        "name":image_path,
     }
 
     cam_info = CVCameraInfo(
@@ -485,7 +486,7 @@ def loadSMPLDataset(
     print("Number of train cameras:", len(train_cameras))
 
     test_cameras = val_cameras
-    val_cameras = cameras[:n_val]
+    #val_cameras = cameras[:n_val]
     test_meshes = []
 
     tgt_meshes = []

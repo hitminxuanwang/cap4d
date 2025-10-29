@@ -13,7 +13,8 @@
 # python gaussianavatars/train_fullbody.py \
 #    --config_path configs/avatar/default.yaml \
 #    --source_paths examples/output/full_body/ \
-#    --model_path examples/output/full_body/avatar_refine/
+#    --model_path examples/output/full_body/avatar_refine/ \
+   #--test_iterations  1 2 5 10
 
 # # Test rendering and export 
  python gaussianavatars/animate_smpl.py \

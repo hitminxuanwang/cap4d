@@ -197,3 +197,7 @@ cython_debug/
 /examples/output
 /data/weights/mmdm/checkpoints
 data/assets/smpl/SMPL_NEUTRAL.pkl
+/FLAME_PyTorch
+*.obj
+*.obj
+remeshed_model_256.obj
