@@ -7,7 +7,7 @@ from scipy.spatial.transform import Rotation
 n_frames = 100  # Number of frames in the animation
 output_npz = 'right_hand_wave_animation.npz'  # Output file name
 smpl_model_path = 'data/assets/smpl/SMPL_NEUTRAL.pkl'  # Path to SMPL model (adjust if needed)
-resolution = np.array([512, 512])  # Image resolution (for camera intrinsics, can adjust)
+resolution = np.array([1080, 1080])  # Image resolution (for camera intrinsics, can adjust)
 
 # Load SMPL model
 smpl_model = smplx.SMPL(model_path=smpl_model_path, batch_size=n_frames)

@@ -201,3 +201,5 @@ data/assets/smpl/SMPL_NEUTRAL.pkl
 *.obj
 *.obj
 remeshed_model_256.obj
+*.npz
+*.obj

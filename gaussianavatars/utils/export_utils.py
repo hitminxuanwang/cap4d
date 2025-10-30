@@ -27,6 +27,7 @@ class PlyWriter:
         verts = gaussians.verts[0].cpu().numpy()
 
         if self.faces is None:
+            print(f"Storing Gaussian attributes and faces for PLY export.")
             self.faces = gaussians.faces.cpu().numpy()
             self.init_vertices = verts
             self.gaussian_attributes = {

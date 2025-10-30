@@ -86,8 +86,9 @@ def render_sequence(args):
     gaussians = SMPLGaussianModel(avatar_config["model_params"])
     gaussians.eval()
     
+
     scene = SMPLScene(
-        source_paths=None,
+        source_paths=args.source_paths,
         target_paths=target_paths,
         model_path=model_path,
         gaussians=gaussians, 
@@ -141,6 +142,7 @@ def render_sequence(args):
         
         rendering = render_out["render"]
 
+        print("Export", args.export_ply)
         if args.export_ply:
             ply_writer.update(gaussians)
 

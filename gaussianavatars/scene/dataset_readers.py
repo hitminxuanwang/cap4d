@@ -381,6 +381,97 @@ def readSMPLImageSet(path: Path, cam_id_offset=0):
     return cameras, meshes
 
 
+def readSMPLDrivingSequence(paths: Dict[str, Any], cam_id_offset=0):
+    fit_path = paths["animation_path"]
+
+    print(f"Loading target sequence from {fit_path}")
+    
+    fit = dict(np.load(paths["animation_path"]))
+
+    n_frames = fit["body_pose"].shape[0]
+
+    if "cam_trajectory_path" in paths and paths["cam_trajectory_path"] is not None:
+        cam_traj_path = paths["cam_trajectory_path"]
+        print(f"Loading camera trajectory from {cam_traj_path}")
+        cam_trajectory = dict(np.load(cam_traj_path))
+
+        extr_list = cam_trajectory["extr"]
+        fx_list = cam_trajectory["fx"]
+        fy_list = cam_trajectory["fy"]
+        cx_list = cam_trajectory["cx"]
+        cy_list = cam_trajectory["cy"]
+        assert extr_list.shape[0] >= n_frames, "number of frames in the camera trajectory must be greater or equal to the driving sequence"
+
+        resolution = cam_trajectory["resolution"]
+    else:
+        # If no camera trajectory, define a default fixed camera extrinsics (e.g., identity with z-translation for view)
+        # Assuming static camera; adjust default extr if needed
+        default_extr = np.eye(4)
+        default_extr[2, 3] = -2.0  # Move camera back along z for better view (adjust as needed)
+        extr_list = np.repeat(default_extr[None], n_frames, axis=0)
+        
+        fx_list = fit["fx"][[0]].repeat(n_frames, axis=0)
+        fy_list = fit["fy"][[0]].repeat(n_frames, axis=0)
+        cx_list = fit["cx"][[0]].repeat(n_frames, axis=0)
+        cy_list = fit["cy"][[0]].repeat(n_frames, axis=0)
+
+        resolution = fit["resolution"]
+
+    cameras = []
+    meshes = []
+
+    for frame_id in tqdm(range(n_frames)):
+        # Use global_orient as rot (axis-angle) and T as tra for reverse_transform
+        rot = fit["global_orient"][frame_id]  # Axis-angle
+        tra = fit["T"][frame_id]
+
+        extr, rot, tra = reverse_transform(
+            extr_list[frame_id],
+            rot,
+            tra,
+        )
+
+        intrinsics = np.array(
+            [[fx_list[frame_id, 0], 0, cx_list[frame_id, 0]],
+             [0, fy_list[frame_id, 0], cy_list[frame_id, 0]],
+             [0, 0, 1]],
+        )
+
+        global_orient = fit["global_orient"][frame_id]
+        body_pose = fit["body_pose"][frame_id]
+        thetas = np.concatenate([global_orient, body_pose])
+
+        smpl_out = {
+            "betas": fit["betas"],  # Shared across frames or per-frame if array
+            "thetas": thetas,
+            "global_orient": global_orient,
+            "body_pose": body_pose,
+            "transl": tra,  # Adjusted tra
+            "rot": rot,  # Adjusted rot (zeroed in reverse_transform)
+            "tra": tra,  # Adjusted tra (zeroed)
+        }
+
+        cam_info = CVCameraInfo(
+            rt=extr,
+            intrinsics=intrinsics,
+            uid=cam_id_offset + frame_id,
+            bg=None,
+            image=None,
+            image_path=None,
+            image_name=None,
+            width=resolution[1],
+            height=resolution[0],
+            timestep=cam_id_offset + frame_id,
+            camera_id=cam_id_offset + frame_id,
+            mask=None,
+        )
+
+        meshes.append(smpl_out)
+        cameras.append(cam_info)
+
+    return cameras, meshes
+
+
 def readCAP4DDrivingSequence(paths: Dict[str, Any], cam_id_offset=0):
     fit_path = paths["animation_path"]
 
@@ -498,6 +589,15 @@ def loadSMPLDataset(
     #         target_paths, 
     #         cam_id_offset=len(train_meshes)+len(test_meshes)
     #     )
+    # print("TARGET PATHS:", target_paths)
+    if target_paths is not None:
+        tgt_cameras, tgt_meshes = readSMPLDrivingSequence(
+            target_paths, 
+            cam_id_offset=len(train_meshes)+len(test_meshes)
+        )
+
+
+
     
     scene_info = SceneInfo(
         train_cameras=train_cameras,

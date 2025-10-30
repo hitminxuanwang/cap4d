@@ -17,13 +17,21 @@
    #--test_iterations  1 2 5 10
 
 # # Test rendering and export 
- python gaussianavatars/animate_smpl.py \
- --model_path examples/output/full_body/avatar_refine/ \
- --output_path examples/output/full_body/static_render/ \
- --source_paths examples/output/full_body/ \
- --render_static \
- --timestep 0 \
- --camera_id 0 \
- --export_ply 1
+#  python gaussianavatars/animate_smpl.py \
+#  --model_path examples/output/full_body/avatar_refine/ \
+#  --output_path examples/output/full_body/static_render/ \
+#  --source_paths examples/output/full_body/ \
+#  --render_static \
+#  --timestep 0 \
+#  --camera_id 0 \
+#  --export_ply 1
 
 #python gaussianavatars/show_smpl.py
+
+python gaussianavatars/animate_smpl.py \
+--model_path examples/output/full_body/avatar_refine/ \
+--output_path examples/output/full_body/animated_render/ \
+--source_paths examples/output/full_body/ \
+--target_animation_path combined_animation.npz \
+#--target_cam_trajectory_path examples/input/animation/sequence_01/orbit.npz \
+--export_ply 1
