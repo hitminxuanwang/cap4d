@@ -12,8 +12,8 @@
 # Test GaussianAvatars installation by fitting for a few iterations
 python gaussianavatars/train_fullbody.py \
   --config_path configs/avatar/default.yaml \
-  --source_paths examples/output/2k_without_unet/ \
-  --model_path examples/output/2k_without_unet/avatar_refine/ \
+  --source_paths examples/output/single_layer_mini/ \
+  --model_path examples/output/single_layer_mini/avatar/ \
    #--test_iterations  1 2 5 10
 
 # # Test rendering and export 
@@ -29,9 +29,9 @@ python gaussianavatars/train_fullbody.py \
 #python gaussianavatars/show_smpl.py
 
 # python gaussianavatars/animate_smpl.py \
-# --model_path examples/output/2k_without_unet/avatar_refine/ \
-# --output_path examples/output/2k_without_unet/animated_render/ \
-# --source_paths examples/output/2k_without_unet/ \
+# --model_path examples/output/single_layer_mini/avatar/ \
+# --output_path examples/output/single_layer_mini/animated_render/ \
+# --source_paths examples/output/single_layer_mini/ \
 # --target_animation_path combined_animation.npz \
 # #--target_cam_trajectory_path examples/input/animation/sequence_01/orbit.npz \
 # --export_ply 1

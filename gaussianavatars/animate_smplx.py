@@ -24,8 +24,8 @@ from argparse import ArgumentParser
 from gaussianavatars.utils.system_utils import searchForMaxIteration
 from gaussianavatars.utils.general_utils import safe_state
 from gaussianavatars.gaussian_renderer.gsplat_renderer import render
-from gaussianavatars.scene.scene import Scene, SMPLScene
-from gaussianavatars.scene.cap4d_gaussian_model import CAP4DGaussianModel, SMPLGaussianModel
+from gaussianavatars.scene.scene import Scene, SMPLXScene, SMPLScene
+from gaussianavatars.scene.cap4d_gaussian_model import CAP4DGaussianModel, SMPLXGaussianModel,SMPLGaussianModel
 from gaussianavatars.utils.export_utils import PlyWriter
 
 
@@ -83,11 +83,10 @@ def render_sequence(args):
 
     avatar_config = OmegaConf.load(model_path / "config_dump.yaml")
 
-    gaussians = SMPLGaussianModel(avatar_config["model_params"])
-    gaussians.eval()
+    gaussians = SMPLXGaussianModel(avatar_config["model_params"])
     
 
-    scene = SMPLScene(
+    scene = SMPLXScene(
         source_paths=args.source_paths,
         target_paths=target_paths,
         model_path=model_path,
@@ -176,11 +175,11 @@ def render_static(args):
     model_path = Path(args.model_path)
     avatar_config = OmegaConf.load(model_path / "config_dump.yaml")
 
-    gaussians = SMPLGaussianModel(avatar_config["model_params"])
-    gaussians.eval()
+    gaussians = SMPLXGaussianModel(avatar_config["model_params"])
+    #gaussians.eval()
     
     # For static render, we don't need target animation, but load scene for cameras
-    scene = SMPLScene(
+    scene = SMPLXScene(
         source_paths=args.source_paths,
         model_path=model_path,
         gaussians=gaussians,

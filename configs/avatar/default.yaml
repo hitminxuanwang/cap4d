@@ -1,8 +1,8 @@
 opt_params:
-  iterations: 1_0000
+  iterations: 3_0000
 
-  sh_warmup_iterations: 1_000
-
+  #sh_warmup_iterations: 1_000
+  sh_warmup_iterations: 500
   # clip_probability: 0.2
 
   lambda_scale: 1.
@@ -20,28 +20,32 @@ opt_params:
   #lambda_dssim: 0.4
   lambda_dssim: 0.5
 
-  densification_interval: 1000
-  densify_grad_threshold: 1e-6
+  #densification_interval: 1000
+  densification_interval: 200
+  #densify_grad_threshold: 1e-6
+  densify_grad_threshold: 2e-6
   opacity_reset_interval: 8_000
-  densify_until_iter: 49_000
-  densify_from_iter: 8_000
+  densify_until_iter: 15_000
+  densify_from_iter: 6_000
 
   position_lr_init: 5e-3
   position_lr_final: 5e-5
   position_lr_delay_mult: 0.01
-  position_lr_max_steps: 100_000
+  position_lr_max_steps: 30_000
   
   w_lpips: 0.1
   lambda_lpips_end: 1.0
   #lpips_linear_start: 1_0000
   #lpips_linear_end: 6_0000
   lpips_linear_start: 1_000
-  lpips_linear_end: 7_000
-  deform_net_w_decay: 2e-3
-  deform_net_lr_init: 1e-5
+  lpips_linear_end: 2_0000
+  #deform_net_w_decay: 2e-3
+  deform_net_w_decay: 5e-3
+  #deform_net_lr_init: 1e-5
+  deform_net_lr_init: 1e-6
   deform_net_lr_final: 1e-7
   deform_net_lr_delay_mult: 0.01
-  deform_net_lr_max_steps: 100_000
+  deform_net_lr_max_steps: 30_000
   lambda_laplacian: 1.0
   lambda_relative_deform: 0.4
   lambda_relative_rot: 0.005
@@ -55,13 +59,13 @@ opt_params:
   
 model_params:
   n_unet_layers: 6
-  n_points_per_triangle: 2
+  n_points_per_triangle: 4
   use_lower_jaw: True
-  static_neck: False
+  static_neck: True
   use_glasses: True
   gaussian_init_type: "scaled"
-  use_expr_mask: True
-  uv_resolution: 256
+  use_expr_mask: False
+  uv_resolution: 128
   n_gaussians_init: 100_000
 
   sh_degree: 1

@@ -28,10 +28,10 @@
 
 #python gaussianavatars/show_smpl.py
 
-python gaussianavatars/animate_smpl.py \
---model_path examples/output/full_body/avatar_refine/ \
---output_path examples/output/full_body/animated_render/ \
---source_paths examples/output/full_body/ \
---target_animation_path combined_animation.npz \
-#--target_cam_trajectory_path examples/input/animation/sequence_01/orbit.npz \
---export_ply 1
+# python gaussianavatars/animate_smpl.py \
+# --model_path examples/output/full_body/avatar_refine/ \
+# --output_path examples/output/full_body/animated_render/ \
+# --source_paths examples/output/full_body/ \
+# --target_animation_path combined_animation.npz \
+# #--target_cam_trajectory_path examples/input/animation/sequence_01/orbit.npz \
+# --export_ply 1

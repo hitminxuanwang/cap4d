@@ -20,8 +20,8 @@ import torch.nn.functional as F
 
 from gaussianavatars.utils.system_utils import searchForMaxIteration
 from gaussianavatars.gaussian_renderer.gsplat_renderer import render
-from gaussianavatars.scene.cap4d_gaussian_model import CAP4DGaussianModel, SMPLGaussianModel
-from gaussianavatars.scene.scene import Scene, SMPLScene
+from gaussianavatars.scene.cap4d_gaussian_model import CAP4DGaussianModel, SMPLGaussianModel, SMPLXGaussianModel
+from gaussianavatars.scene.scene import Scene, SMPLScene, SMPLXScene
 from gaussianavatars.utils.loss_utils import l1_loss, ssim
 from gaussianavatars.utils.general_utils import safe_state
 from gaussianavatars.utils.image_utils import psnr, error_map
@@ -54,55 +54,71 @@ def training(
         tb_writer = SummaryWriter(model_path)
     else:
         print("Tensorboard not available: not logging progress")
-    smpl_guassians = SMPLGaussianModel(model_params)
-    scene = SMPLScene(
+
+    smplx_guassians = SMPLXGaussianModel(model_params)
+
+    scene = SMPLXScene(
         model_path=model_path, 
         source_paths=source_paths, 
-        gaussians=smpl_guassians,
+        gaussians=smplx_guassians,
         shuffle=False,
     )
-    smpl_guassians.training_setup(opt_params)
+    smplx_guassians.training_setup(opt_params)
 
 
-    return None
 
 
     #DEBUG: Render all training views once before starting training
 
-    debug_dir = os.path.join(model_path, "debug")
-    os.makedirs(debug_dir, exist_ok=True)
-    background = torch.tensor([1.0, 1.0, 1.0], dtype=torch.float32, device="cuda")
-    train_cameras = scene.getTrainCameras()
-    for idx, camera in enumerate(train_cameras):
-        if smpl_guassians.binding is not None:
-            smpl_guassians.select_mesh_by_timestep(camera.timestep)
+    # debug_dir = os.path.join(model_path, "debug")
+    # os.makedirs(debug_dir, exist_ok=True)
+    # background = torch.tensor([1.0, 1.0, 1.0], dtype=torch.float32, device="cuda")
+    # train_cameras = scene.getTrainCameras()
+    # for idx, camera in enumerate(train_cameras):
+    #     if smplx_guassians.binding is not None:
+    #         smplx_guassians.select_mesh_by_timestep(camera.timestep)
         
 
-        global_orient = smpl_guassians.smpl_param["global_orient"][camera.timestep]
-        #print(f"Frame {idx:04d} global_orient: {global_orient}")
-        #rot_matrix = batch_rodrigues(torch.tensor(global_orient).unsqueeze(0)).squeeze(0)
-        #print(f"Frame {idx:04d} rotation matrix: {rot_matrix}")
+    #     #global_orient = smplx_guassians.smplx_param["global_orient"][camera.timestep]
+    #     #print(f"Frame {idx:04d} global_orient: {global_orient}")
+    #     #rot_matrix = batch_rodrigues(torch.tensor(global_orient).unsqueeze(0)).squeeze(0)
+    #     #print(f"Frame {idx:04d} rotation matrix: {rot_matrix}")
 
-
-        render_out = render(camera, smpl_guassians, background)
-        render_image = render_out["render"].clamp(0.0, 1.0).detach().permute(1, 2, 0).cpu().numpy() * 255.0
-        gt_image = camera.original_image.permute(1, 2, 0).cpu().numpy() * 255.0 if camera.original_image is not None else np.zeros_like(render_image)
+    #     # Print camera intrinsics and extrinsics
+    #     print(f"Frame {idx:04d} Camera Intrinsics:",camera.intrinsics.cpu().numpy())
+    #     print(f"Frame {idx:04d} Camera Extrinsics:", camera.rt.cpu().numpy())
+    #     print(f"Frame {idx:04d} Camera Translation:", camera.trans)
+    #     print(f"Frame {idx:04d} Camera Scale:", camera.scale)
+    #     print(f"Frame {idx:04d} Image :", camera.image_height, camera.image_width)
         
-        #print(camera.image_name,'RT: ',camera.rt,'Intrinsics ', camera.intrinsics)
+    #     # Compute and print model center (mean of current mesh vertices)
+    #     # if hasattr(smplx_guassians, 'verts') and smplx_guassians.verts is not None:
+    #     #     #model_center = torch.mean(smplx_guassians.verts, dim=1).cpu().numpy()  # Mean across vertices
+    #     #     model_center = torch.mean(smplx_guassians.verts, dim=1).detach().cpu().numpy()
+    #     #     print(f"Frame {idx:04d} Model Center:")
+    #     #     print(model_center)
+    #     # else:
+    #     #     print(f"Frame {idx:04d} No verts available for model center.")
 
-        # Save render image
-        render_pil = Image.fromarray(render_image.astype(np.uint8))
-        render_pil.save(os.path.join(debug_dir, f"render_{idx:04d}.png"))
+    #     render_out = render(camera, smplx_guassians, background)
+    #     render_image = render_out["render"].clamp(0.0, 1.0).detach().permute(1, 2, 0).cpu().numpy() * 255.0
+    #     gt_image = camera.original_image.permute(1, 2, 0).cpu().numpy() * 255.0 if camera.original_image is not None else np.zeros_like(render_image)
         
-        # Save GT image
-        gt_pil = Image.fromarray(gt_image.astype(np.uint8))
-        gt_pil.save(os.path.join(debug_dir, f"gt_{idx:04d}.png"))
-        
-        # Blend render onto GT with alpha=0.5
-        blended_image = Image.blend(gt_pil, render_pil, alpha=0.5)
-        blended_image.save(os.path.join(debug_dir, f"blended_{idx:04d}.png"))
+    #     #print(camera.image_name,'RT: ',camera.rt,'Intrinsics ', camera.intrinsics)
 
-    return None
+    #     # Save render image
+    #     render_pil = Image.fromarray(render_image.astype(np.uint8))
+    #     render_pil.save(os.path.join(debug_dir, f"render_{idx:04d}.png"))
+        
+    #     # Save GT image
+    #     gt_pil = Image.fromarray(gt_image.astype(np.uint8))
+    #     gt_pil.save(os.path.join(debug_dir, f"gt_{idx:04d}.png"))
+        
+    #     # Blend render onto GT with alpha=0.5
+    #     blended_image = Image.blend(gt_pil, render_pil, alpha=0.5)
+    #     blended_image.save(os.path.join(debug_dir, f"blended_{idx:04d}.png"))
+
+    # return None
 
     # if prompted and if it exists, load existing checkpoint
     if load_existing_checkpoint:
@@ -112,7 +128,7 @@ def training(
         else:
             print("Loading trained model at iteration {}".format(loaded_iter))
             (model_weights, first_iter) = torch.load(chkpt_path, weights_only=False)
-            smpl_guassians.restore(model_weights, opt_params)
+            smplx_guassians.restore(model_weights, opt_params)
     
     lpips = LPIPS('vgg').cuda()
 
@@ -137,9 +153,9 @@ def training(
     for iteration in range(first_iter, opt_params["iterations"] + 1):    
         iter_start.record()
 
-        smpl_guassians.train()
+        #smplx_guassians.train()
 
-        smpl_guassians.update_learning_rate(iteration)
+        smplx_guassians.update_learning_rate(iteration)
 
         # Every 1000 its we increase the levels of SH up to a maximum degree
         # if iteration % opt_params["sh_warmup_iterations"] == 0:
@@ -152,16 +168,16 @@ def training(
             viewpoint_cam = next(iter_camera_train)
 
         # Set timestep and run FLAME model
-        if smpl_guassians.binding != None:
-            smpl_guassians.select_mesh_by_timestep(viewpoint_cam.timestep)
+        if smplx_guassians.binding != None:
+            smplx_guassians.select_mesh_by_timestep(viewpoint_cam.timestep)
 
 
 
-        assert smpl_guassians.timestep == viewpoint_cam.timestep
+        assert smplx_guassians.timestep == viewpoint_cam.timestep
         # Render Gaussians
         render_pkg = render(
             viewpoint_cam, 
-            smpl_guassians, 
+            smplx_guassians, 
             background, 
         )
     
@@ -230,24 +246,24 @@ def training(
         losses['ssim'] = (1.0 - ssim(image, gt_image)) * opt_params["lambda_dssim"] * (1.0 - lambda_lpips)
 
         if opt_params["metric_xyz"]:
-            losses['xyz'] = F.relu((smpl_guassians._xyz*smpl_guassians.face_scaling[smpl_guassians.binding])[visibility_filter] - opt_params["threshold_xyz"]).norm(dim=1).mean() * opt_params["lambda_xyz"]
+            losses['xyz'] = F.relu((smplx_guassians._xyz*smplx_guassians.face_scaling[smplx_guassians.binding])[visibility_filter] - opt_params["threshold_xyz"]).norm(dim=1).mean() * opt_params["lambda_xyz"]
         else:
-            losses['xyz'] = F.relu(smpl_guassians._xyz[visibility_filter].norm(dim=1) - opt_params["threshold_xyz"]).mean() * opt_params["lambda_xyz"]
+            losses['xyz'] = F.relu(smplx_guassians._xyz[visibility_filter].norm(dim=1) - opt_params["threshold_xyz"]).mean() * opt_params["lambda_xyz"]
 
         if opt_params["lambda_scale"] != 0:
             if opt_params["metric_scale"]:
-                losses['scale'] = F.relu(smpl_guassians.get_scaling[visibility_filter] - opt_params["threshold_scale"]).norm(dim=1).mean() * opt_params["lambda_scale"]
+                losses['scale'] = F.relu(smplx_guassians.get_scaling[visibility_filter] - opt_params["threshold_scale"]).norm(dim=1).mean() * opt_params["lambda_scale"]
             else:
-                losses['scale'] = F.relu(torch.exp(smpl_guassians._scaling[visibility_filter]) - opt_params["threshold_scale"]).norm(dim=1).mean() * opt_params["lambda_scale"]
+                losses['scale'] = F.relu(torch.exp(smplx_guassians._scaling[visibility_filter]) - opt_params["threshold_scale"]).norm(dim=1).mean() * opt_params["lambda_scale"]
 
         if opt_params["lambda_laplacian"] != 0:
-            losses['lap'] = smpl_guassians.compute_laplacian_loss() * opt_params["lambda_laplacian"]
+            losses['lap'] = smplx_guassians.compute_laplacian_loss() * opt_params["lambda_laplacian"]
 
         if opt_params["lambda_relative_deform"] != 0:
-            losses['deform'] = smpl_guassians.compute_relative_deformation_loss() * opt_params["lambda_relative_deform"]
+            losses['deform'] = smplx_guassians.compute_relative_deformation_loss() * opt_params["lambda_relative_deform"]
 
         if opt_params["lambda_relative_rot"] != 0:
-            losses['rot'] = smpl_guassians.compute_relative_rotation_loss() * opt_params["lambda_relative_rot"]
+            losses['rot'] = smplx_guassians.compute_relative_rotation_loss() * opt_params["lambda_relative_rot"]
 
         # if opt_params["lambda_neck"] != 0:
         #     losses['neck'] = smpl_guassians.compute_neck_loss() * opt_params["lambda_neck"]
@@ -263,7 +279,7 @@ def training(
 
 
         with torch.no_grad():
-            smpl_guassians.eval()
+            #smplx_guassians.eval()
 
             # Progress bar
             ema_loss_for_log = 0.4 * losses['total'].item() + 0.6 * ema_loss_for_log
@@ -300,23 +316,23 @@ def training(
             # Densification
             if iteration < opt_params["densify_until_iter"]:
                 # Keep track of max radii in image-space for pruning
-                smpl_guassians.max_radii2D[visibility_filter] = torch.max(smpl_guassians.max_radii2D[visibility_filter], radii[visibility_filter])
-                smpl_guassians.add_densification_stats(viewspace_point_tensor, visibility_filter)
+                smplx_guassians.max_radii2D[visibility_filter] = torch.max(smplx_guassians.max_radii2D[visibility_filter], radii[visibility_filter])
+                smplx_guassians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
                 if iteration > opt_params["densify_from_iter"] and iteration % opt_params["densification_interval"] == 0:
                     size_threshold = 20 if iteration > opt_params["opacity_reset_interval"] else None
-                    smpl_guassians.densify_and_prune(opt_params["densify_grad_threshold"], 0.005, scene.cameras_extent, size_threshold)
+                    smplx_guassians.densify_and_prune(opt_params["densify_grad_threshold"], 0.005, scene.cameras_extent, size_threshold)
                 
                 if iteration % opt_params["opacity_reset_interval"] == 0 or (iteration == opt_params["densify_from_iter"]):
-                    smpl_guassians.reset_opacity()
+                    smplx_guassians.reset_opacity()
 
             # Optimizer step
             if iteration < opt_params["iterations"]:
-                smpl_guassians.optimizer_step()
+                smplx_guassians.optimizer_step()
 
             if (iteration in checkpoint_iterations):
                 print("[ITER {}] Saving Checkpoint".format(iteration))
-                torch.save((smpl_guassians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+                torch.save((smplx_guassians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
 
 def training_report(
