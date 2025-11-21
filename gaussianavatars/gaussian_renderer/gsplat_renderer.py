@@ -59,6 +59,9 @@ def render(
         render_mode="RGB" if not compute_depth else "RGB+ED",
     )
     
+
+    #print('GSSplat Ks:', viewpoint_camera.intrinsics )
+
     rgb_image = rendered_image[0].permute(2, 0, 1)
     depth_image = None
     if compute_depth:

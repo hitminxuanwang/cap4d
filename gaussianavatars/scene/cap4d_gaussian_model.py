@@ -1297,10 +1297,96 @@ class SMPLXGaussianModel(GaussianModel):
 
         if not self.enable_deform_net:
             self.load_uv_no_remesh()
+            #self.load_uv()
+
         else:
             self.load_uv()
 
     
+ 
+    @torch.no_grad()
+    def load_uv(self):
+        self.vert_shader = VertexShader().cuda()
+
+        # For SMPL, define deformable vertices (assume all or load from file similar to FLAME)
+        deformable_vertices = np.genfromtxt("data/assets/smplx/deformable_verts.txt").astype(np.int64)  # Assume user provides this
+        
+        vert_mask = torch.zeros_like(self.smplx_verts[:, 0]).cuda()
+        vert_mask[deformable_vertices] = 1
+        deformable_face_mask = vert_mask[self.smplx_faces]
+        deformable_face_mask = deformable_face_mask.min(dim=-1)[0]
+
+        # create pix_to_face map for UV rasterization and remeshing
+        shader_input = {
+            "positions": torch.cat([self.smplx_uvs, torch.ones_like(self.smplx_uvs[:, [1]])], dim=-1)[None],
+        }
+        _, fragments = self.vert_shader(
+            shader_input, 
+            self.smplx_faces_uvs[None], 
+            None, 
+            None, 
+            (self.uv_resolution, self.uv_resolution), 
+            0.
+        )
+        self.fragments = fragments
+
+        pix_to_face = self.fragments.pix_to_face
+        uv_mask = pix_to_face >= 0
+
+        self.uv_mask = uv_mask.permute(0, 3, 1, 2)
+
+        pix_to_face[pix_to_face < 0] = 0
+
+        deform_mask = deformable_face_mask[pix_to_face]
+        deform_mask = torch.logical_and(deform_mask, uv_mask)
+        
+        self.deform_mask = deform_mask.permute(0, 3, 1, 2)
+
+        uv_mask = uv_mask.permute(0, 3, 1, 2)
+        self.uv_remesh_faces = gen_uv_mesh(uv_mask)
+
+        # compute face area with template vertices
+        # and count number of bindings
+        template_verts = self.smplx_verts.to(self.smplx_faces.device)
+
+        uv_remesh_verts = self.uv_remesh_smpl_vertices(template_verts[None])[0]  # Adjusted method name
+        uv_remesh_verts = einops.rearrange(uv_remesh_verts, 'h w c -> (h w) c')
+
+        # Export intermediate OBJ result
+        import trimesh
+        import os
+        output_dir = './' 
+        os.makedirs(output_dir, exist_ok=True)
+        remeshed_verts_np = uv_remesh_verts.cpu().numpy()
+        remeshed_faces_np = self.uv_remesh_faces.cpu().numpy()
+        remeshed_mesh = trimesh.Trimesh(vertices=remeshed_verts_np, faces=remeshed_faces_np)
+        remeshed_mesh.export(os.path.join(output_dir, f'remeshed_smplx_model.obj'))
+
+
+
+        triangles = uv_remesh_verts[self.uv_remesh_faces]
+
+        ab = triangles[:, 1] - triangles[:, 0]
+        ac = triangles[:, 2] - triangles[:, 0]
+        face_area = 0.5 * torch.norm(torch.cross(ab, ac, dim=-1), dim=-1)
+
+        gaussians_per_face = self.n_gaussians_init / face_area.sum() * face_area
+        gaussians_per_face = gaussians_per_face.round().long().clamp(self.n_points_per_triangle)
+
+        # adjust counts per triangle according to face area
+        counts = []
+        binding = []
+        for i in range(gaussians_per_face.shape[0]):
+            for j in range(gaussians_per_face[i]):
+                counts.append(gaussians_per_face[i])
+                binding.append(i)
+        self.gaussian_counts = torch.tensor(counts).float().cuda()
+        self.binding = torch.tensor(binding).to(torch.int64).cuda()
+        self.binding_counter = gaussians_per_face.to(torch.int32)
+
+
+
+
     @torch.no_grad()
     def load_uv_no_remesh(self):
         self.vert_shader = VertexShader().cuda()
@@ -1389,8 +1475,14 @@ class SMPLXGaussianModel(GaussianModel):
 
         T = len(meshes)
 
+        #print(train_meshes.__len__(), 'train meshes', test_meshes.__len__(), 'test meshes', tgt_meshes.__len__(), 'tgt meshes')
+        print('Total number of meshes loaded:', T)
+
+
+
         self.smplx_param = {
-            'betas': torch.from_numpy(meshes[0]['betas']),
+            #'betas': torch.from_numpy(meshes[125]['betas']),
+            'betas': torch.zeros([T, meshes[0]['betas'].shape[0]]),
             'base_rot': torch.from_numpy(base_rot), 
             'expression': torch.zeros([T, 10]),
             'jaw_pose': torch.zeros([T, 3]),
@@ -1406,7 +1498,19 @@ class SMPLXGaussianModel(GaussianModel):
         if not self.static_neck:
             self.neck_rot_offset = nn.Embedding(T, 3, sparse=True).cuda()  # Reuse if needed
 
-        for t in range(T):
+        # for t in range(T):
+        #     self.smplx_param['expression'][t] = torch.from_numpy(meshes[t].get('expression', np.zeros(10)))
+        #     self.smplx_param['jaw_pose'][t] = torch.from_numpy(meshes[t].get('jaw_pose', np.zeros(3)))
+        #     self.smplx_param['leye_pose'][t] = torch.from_numpy(meshes[t].get('leye_pose', np.zeros(3)))
+        #     self.smplx_param['reye_pose'][t] = torch.from_numpy(meshes[t].get('reye_pose', np.zeros(3)))
+        #     self.smplx_param['left_hand_pose'][t] = torch.from_numpy(meshes[t].get('left_hand_pose', np.zeros(45)))
+        #     self.smplx_param['right_hand_pose'][t] = torch.from_numpy(meshes[t].get('right_hand_pose', np.zeros(45)))
+        #     self.smplx_param['body_pose'][t] = torch.from_numpy(meshes[t]['body_pose'])
+        #     self.smplx_param['global_orient'][t] = torch.from_numpy(meshes[t]['global_orient'])
+        #     self.smplx_param['transl'][t] = torch.from_numpy(meshes[t]['transl'])
+
+        for t, mesh in enumerate(meshes):
+            self.smplx_param['betas'][t] = torch.from_numpy(meshes[t].get('betas', np.zeros(meshes[0]['betas'].shape[0])))
             self.smplx_param['expression'][t] = torch.from_numpy(meshes[t].get('expression', np.zeros(10)))
             self.smplx_param['jaw_pose'][t] = torch.from_numpy(meshes[t].get('jaw_pose', np.zeros(3)))
             self.smplx_param['leye_pose'][t] = torch.from_numpy(meshes[t].get('leye_pose', np.zeros(3)))
@@ -1421,8 +1525,9 @@ class SMPLXGaussianModel(GaussianModel):
         for k, v in self.smplx_param.items():
             if isinstance(v, torch.Tensor):  # Only move Tensors to CUDA (skip list like 'names')
                 self.smplx_param[k] = v.float().cuda()
+        
 
-    def select_mesh_by_timestep(self, timestep):
+    def select_mesh_by_timestep(self, timestep, animation=False):
         self.timestep = timestep
 
 
@@ -1431,10 +1536,21 @@ class SMPLXGaussianModel(GaussianModel):
 
         #centroid = verts.mean(dim=1)  # Compute centroid for centering
 
-        
+        #print('smplx betas shape', self.smplx_param['betas'].shape)
+
+
+        print('Selecting SMPLX mesh at timestep:', timestep)
+        print('SMPLX Param Size', self.smplx_param['betas'].shape)
+
+        if not animation:
+            betas = self.smplx_param['betas'][timestep].unsqueeze(0)
+        else:
+            betas = self.smplx_param['betas'][[0]]
+
 
         smplx_output = self.smplx_model(
-            betas=self.smplx_param['betas'][None],
+            #betas=self.smplx_param['betas'][None],
+            betas=betas,
             expression=self.smplx_param['expression'][timestep].unsqueeze(0),
             jaw_pose=self.smplx_param['jaw_pose'][timestep].unsqueeze(0),
             leye_pose=self.smplx_param['leye_pose'][timestep].unsqueeze(0),
@@ -1450,7 +1566,7 @@ class SMPLXGaussianModel(GaussianModel):
             return_verts=True
         )
 
-
+        #print('Render Param', self.smplx_param)
 
 
 
@@ -1479,8 +1595,17 @@ class SMPLXGaussianModel(GaussianModel):
         offsets = torch.zeros_like(verts)
        
         self.update_mesh_properties_without_remesh(verts, offsets)
-
+        #self.update_mesh_properties(verts, offsets)
     
+    def uv_remesh_smpl_vertices(self, verts):
+        verts_packed = verts[:, self.smplx_faces]
+
+        # remesh vertices
+        uv_px_verts = self.vert_shader._rasterize_property(verts_packed, self.fragments)
+        uv_px_verts = uv_px_verts.squeeze(3)
+
+        return uv_px_verts
+
 
     def update_mesh_properties_without_remesh(self, verts, offsets):
 
@@ -1523,6 +1648,52 @@ class SMPLXGaussianModel(GaussianModel):
         # for mesh rendering
         self.verts = verts
         self.faces = faces
+
+    
+    def update_mesh_properties(self, verts, offsets): 
+            
+        remeshed_verts = self.uv_remesh_smpl_vertices(verts)
+        remeshed_verts = einops.rearrange(remeshed_verts, 'b h w c -> b (h w) c')
+
+        verts = remeshed_verts
+        faces = self.uv_remesh_faces
+
+        # Since no U-Net, treat nodeform_verts as identical to verts (no additional offsets)
+        nodeform_verts = remeshed_verts
+
+        triangles = verts[:, faces]
+        nodeform_triangles = nodeform_verts[:, faces]
+
+        # neutral gaussian deformations (using nodeform as base since no deformation)
+        nodeform_face_center = nodeform_triangles.mean(dim=-2).squeeze(0)
+        # compute undeformed face orientation and scale
+        nodeform_face_orien_mat, nodeform_face_scaling = compute_face_orientation(
+            nodeform_verts.squeeze(0), 
+            faces.squeeze(0), 
+            return_scale=True
+        )
+        self.neutral_face_orien_mat = nodeform_face_orien_mat
+        self.xyz_neutral = self.compute_face_xyz_transformed(nodeform_face_center, nodeform_face_orien_mat, nodeform_face_scaling)
+
+        # position
+        self.face_center = triangles.mean(dim=-2).squeeze(0)
+
+        # compute deformed face orientation and scale (deformed is same as neutral here)
+        self.face_orien_mat, self.face_scaling = compute_face_orientation(
+            verts.squeeze(0), 
+            faces.squeeze(0), 
+            return_scale=True
+        )
+        self.face_orien_quat = roma.quat_xyzw_to_wxyz(roma.rotmat_to_unitquat(self.face_orien_mat))  # roma
+
+        # Optionally set U-Net related outputs to None or zeros if needed elsewhere
+        self.deform_output = None
+        self.neutral_output = None
+
+        # for mesh rendering
+        self.verts = verts
+        self.faces = faces
+
 
 
     def compute_laplacian_loss(self):

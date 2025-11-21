@@ -59,7 +59,7 @@ opt_params:
   
 model_params:
   n_unet_layers: 6
-  n_points_per_triangle: 4
+  n_points_per_triangle: 7
   use_lower_jaw: True
   static_neck: True
   use_glasses: True
@@ -68,4 +68,4 @@ model_params:
   uv_resolution: 128
   n_gaussians_init: 100_000
 
-  sh_degree: 1
+  sh_degree: 0

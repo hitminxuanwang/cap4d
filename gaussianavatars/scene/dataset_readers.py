@@ -244,6 +244,8 @@ def loadSMPLXItem(idx, smplx_path, image_path):
 
     crop_width, crop_height = image.size
 
+    #print('CROP',crop_width, crop_height)
+
     bg = np.array([1, 1, 1])
 
     orig_resolution = np.array([crop_height, crop_width])
@@ -256,14 +258,26 @@ def loadSMPLXItem(idx, smplx_path, image_path):
     cx = smplx_item["cx"][0][0]
     cy = smplx_item["cy"][0][0]
 
+    # if '02_025_0130' in str(image_path):
+    #     print('Source Params:', fx, fy, cx, cy )
+    #     print('smplx_path:', smplx_path)
+    #     print('image_path:', image_path)
+
 
     scale_x = crop_width / 896.0
     scale_y = crop_height / 896.0
+
+    # scale_x = 1.0
+    # scale_y = 1.0
+
     fx *= scale_x
     fy *= scale_y
     cx *= scale_x
     cy *= scale_y
 
+    #print('Scaled Source Params:', fx, fy, cx, cy )
+    # if '02_025_0130' in str(image_path):
+    #     print('Scaled Source Params:', fx, fy, cx, cy )
 
     # print("IMAGE", image.size)
     # print("fx, fy, cx, cy:", fx, fy, cx, cy)
@@ -319,6 +333,8 @@ def loadSMPLXItem(idx, smplx_path, image_path):
     expression = smplx_item["expression"]        # (10,)
     betas = smplx_item["betas"]                  # (10,)
 
+
+    #print(image_path, betas[:10])
     # Full pose vector: concatenate all pose parameters (total 165 dims, flattened)
     thetas = np.concatenate([global_orient, body_pose, jaw_pose, leye_pose, reye_pose, left_hand_pose, right_hand_pose])
 
@@ -339,6 +355,9 @@ def loadSMPLXItem(idx, smplx_path, image_path):
         "name": image_path,
     }
 
+    
+
+
     cam_info = CVCameraInfo(
         rt=extr,
         intrinsics=intrinsics,
@@ -353,6 +372,10 @@ def loadSMPLXItem(idx, smplx_path, image_path):
         camera_id=idx,
         mask=crop_mask,
     )
+    
+    # if '02_025_0130' in str(image_path):
+    #     print('02_025_0130', smplx_out, cam_info)
+
 
     return cam_info, smplx_out
 
@@ -484,8 +507,8 @@ def readSMPLImageSet(path: Path, cam_id_offset=0):
     #print(len(smpl_paths),len(img_paths))
     #print("SMPL_PATH", smpl_paths)
     #print("IMG", img_paths)
-    print("readSMPLImageSet FLAME PATHS:", len(smpl_paths))
-    print("IMG PATHS:", len(img_paths))
+    # print("readSMPLImageSet FLAME PATHS:", len(smpl_paths))
+    # print("IMG PATHS:", len(img_paths))
     assert len(smpl_paths) > 0 and len(img_paths) == len(smpl_paths)
 
     for frame_id in tqdm(range(len(smpl_paths))):        
@@ -503,6 +526,11 @@ def readSMPLImageSet(path: Path, cam_id_offset=0):
 
         cameras.append(camera)
         meshes.append(mesh)
+    
+    # for camera in cameras:
+    #     print('Camera name:', camera.image_name)
+    # for mesh in meshes:
+    #     print('Mesh name:', mesh['name'])
 
     return cameras, meshes
 
@@ -512,22 +540,29 @@ def readSMPLXImageSet(path: Path, cam_id_offset=0):
     smplx_paths = sorted(list((path / "smplx").glob("*.npz")))
     img_paths = sorted(list((path / "images").glob("*.*")))
     
+    #print(smplx_paths)
+    #print(img_paths)
+
+
     cameras = []
     meshes = []
     
     #print(len(smpl_paths),len(img_paths))
     #print("SMPL_PATH", smpl_paths)
     #print("IMG", img_paths)
-    print("SMPLX PATHS:", len(smplx_paths))
-    print("IMG PATHS:", len(img_paths))
+    # print("SMPLX PATHS:", len(smplx_paths))
+    # print("IMG PATHS:", len(img_paths))
     assert len(smplx_paths) > 0 and len(img_paths) == len(smplx_paths)
 
-    for frame_id in tqdm(range(len(smplx_paths))):        
+    for frame_id in tqdm(range(len(smplx_paths))):  
+        #print('Loading SMPLX frame:', frame_id)
         camera, mesh = loadSMPLXItem(
             frame_id + cam_id_offset, 
             smplx_paths[frame_id], 
             img_paths[frame_id], 
         )
+
+
         # print("Loaded camera:", camera.uid, camera.image_name)
         # print("Camera intrinsics:", camera.intrinsics)
         # print("Camera rt:", camera.rt)
@@ -535,8 +570,26 @@ def readSMPLXImageSet(path: Path, cam_id_offset=0):
         # print("Mesh body pose :", mesh)
         #print("Mesh global orient :", mesh)
 
+        smplx_id = smplx_paths[frame_id].stem.split("_img")[0]   
+        img_id   = img_paths[frame_id].stem.split("_img")[0]
+
+        # if smplx_id != img_id:
+        #     print("!!! MISMATCH !!!", smplx_id, img_id)
+
         cameras.append(camera)
         meshes.append(mesh)
+
+
+    # for camera in cameras:
+    #     if '02_025_0130' in str(camera.image_name):
+    #         print('Camera:', camera)
+    # for mesh in meshes:
+    #     #if '02_025_0130' in str(mesh['name']):
+    #     #    print('Mesh:', mesh) 
+    #     print('Mesh name:', mesh['name'], mesh['betas'], mesh['global_orient'], frame_id)   
+
+    # print('Total SMPLX cameras loaded:', len(cameras) )
+    # print('Total SMPLX meshes loaded:', len(meshes) )
 
     return cameras, meshes
 
@@ -914,8 +967,8 @@ def loadSMPLXDataset(
     train_meshes = meshes
     val_cameras = cameras[-n_val:]
 
-
-    
+    # for debug
+    #train_cameras = val_cameras
 
     print("Number of validation cameras:", len(val_cameras))
     print("Number of train cameras:", len(train_cameras))
@@ -934,13 +987,13 @@ def loadSMPLXDataset(
     #         cam_id_offset=len(train_meshes)+len(test_meshes)
     #     )
     # print("TARGET PATHS:", target_paths)
-    # if target_paths is not None:
-    #     tgt_cameras, tgt_meshes = readSMPLDrivingSequence(
-    #         target_paths, 
-    #         cam_id_offset=len(train_meshes)+len(test_meshes)
-    #     )
+    if target_paths is not None:
+        tgt_cameras, tgt_meshes = readSMPLXDrivingSequence(
+            target_paths, 
+            cam_id_offset=len(train_meshes)+len(test_meshes)
+        )
 
-
+    print("Loaded target SMPLX sequence with", len(tgt_cameras), "cameras and", len(tgt_meshes), "meshes")
 
     
     scene_info = SceneInfo(

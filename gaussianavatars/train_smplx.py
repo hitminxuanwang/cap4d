@@ -54,8 +54,10 @@ def training(
         tb_writer = SummaryWriter(model_path)
     else:
         print("Tensorboard not available: not logging progress")
-
+    
+    #return None
     smplx_guassians = SMPLXGaussianModel(model_params)
+
 
     scene = SMPLXScene(
         model_path=model_path, 
@@ -67,16 +69,28 @@ def training(
 
 
 
-
     #DEBUG: Render all training views once before starting training
 
-    # debug_dir = os.path.join(model_path, "debug")
-    # os.makedirs(debug_dir, exist_ok=True)
-    # background = torch.tensor([1.0, 1.0, 1.0], dtype=torch.float32, device="cuda")
-    # train_cameras = scene.getTrainCameras()
+    debug_dir = os.path.join(model_path, "debug")
+    os.makedirs(debug_dir, exist_ok=True)
+    background = torch.tensor([1.0, 1.0, 1.0], dtype=torch.float32, device="cuda")
+    train_cameras = scene.getTrainCameras()
+
+    # print("Rendering all training views for debugging before training...")
+    # print(f"Number of training cameras: {len(train_cameras)}")
     # for idx, camera in enumerate(train_cameras):
     #     if smplx_guassians.binding is not None:
+    #         #print('Camera name:', camera.image_name)
+    #         # if '02_025_0130' not in camera.image_name:
+    #         #     continue
     #         smplx_guassians.select_mesh_by_timestep(camera.timestep)
+    #         # print(f"Frame {idx:04d} Camera Intrinsics:",camera.intrinsics.cpu().numpy())
+    #         # print(f"Frame {idx:04d} Camera Extrinsics:", camera.rt.cpu().numpy())
+    #         # print(f"Frame {idx:04d} Camera Translation:", camera.trans)
+    #         # print(f"Frame {idx:04d} Camera Scale:", camera.scale)
+    #         # print(f"Frame {idx:04d} Image :", camera.image_height, camera.image_width)
+    #         # print(f"Frame {idx:04d} Name :", camera.image_name)
+    #         #print('Render Camera',camera)
         
 
     #     #global_orient = smplx_guassians.smplx_param["global_orient"][camera.timestep]
@@ -85,11 +99,7 @@ def training(
     #     #print(f"Frame {idx:04d} rotation matrix: {rot_matrix}")
 
     #     # Print camera intrinsics and extrinsics
-    #     print(f"Frame {idx:04d} Camera Intrinsics:",camera.intrinsics.cpu().numpy())
-    #     print(f"Frame {idx:04d} Camera Extrinsics:", camera.rt.cpu().numpy())
-    #     print(f"Frame {idx:04d} Camera Translation:", camera.trans)
-    #     print(f"Frame {idx:04d} Camera Scale:", camera.scale)
-    #     print(f"Frame {idx:04d} Image :", camera.image_height, camera.image_width)
+
         
     #     # Compute and print model center (mean of current mesh vertices)
     #     # if hasattr(smplx_guassians, 'verts') and smplx_guassians.verts is not None:
@@ -100,23 +110,27 @@ def training(
     #     # else:
     #     #     print(f"Frame {idx:04d} No verts available for model center.")
 
+    #         #camera.image_name = camera.image_name.replace('.','_')
+
+
     #     render_out = render(camera, smplx_guassians, background)
     #     render_image = render_out["render"].clamp(0.0, 1.0).detach().permute(1, 2, 0).cpu().numpy() * 255.0
     #     gt_image = camera.original_image.permute(1, 2, 0).cpu().numpy() * 255.0 if camera.original_image is not None else np.zeros_like(render_image)
         
     #     #print(camera.image_name,'RT: ',camera.rt,'Intrinsics ', camera.intrinsics)
 
+        
     #     # Save render image
     #     render_pil = Image.fromarray(render_image.astype(np.uint8))
-    #     render_pil.save(os.path.join(debug_dir, f"render_{idx:04d}.png"))
+    #     render_pil.save(os.path.join(debug_dir, f"render_{camera.image_name}.png"))
         
     #     # Save GT image
     #     gt_pil = Image.fromarray(gt_image.astype(np.uint8))
-    #     gt_pil.save(os.path.join(debug_dir, f"gt_{idx:04d}.png"))
+    #     gt_pil.save(os.path.join(debug_dir, f"gt_{camera.image_name}.png"))
         
     #     # Blend render onto GT with alpha=0.5
     #     blended_image = Image.blend(gt_pil, render_pil, alpha=0.5)
-    #     blended_image.save(os.path.join(debug_dir, f"blended_{idx:04d}.png"))
+    #     blended_image.save(os.path.join(debug_dir, f"blended_{camera.image_name}.png"))
 
     # return None
 
@@ -204,26 +218,26 @@ def training(
         # print('CameraRT:/t', viewpoint_cam.rt)
         # print('Intrinsics:/t', viewpoint_cam.intrinsics)
 
-        #if(iteration % 100 == 0):
-        # if True:
-        #     # Blend render onto GT with alpha=0.5
-        #     gt_image_cpu = gt_image.permute(1, 2, 0).cpu().numpy() * 255.0
-        #     gt_pil = Image.fromarray(gt_image_cpu.astype(np.uint8))
-        #     render_pil = Image.fromarray(render_image.astype(np.uint8))
-        #     combined_image = Image.blend(gt_pil, render_pil, alpha=0.6)
+        if(iteration % 100 == 0):
+        #if True:
+            # Blend render onto GT with alpha=0.5
+            gt_image_cpu = gt_image.permute(1, 2, 0).cpu().numpy() * 255.0
+            gt_pil = Image.fromarray(gt_image_cpu.astype(np.uint8))
+            render_pil = Image.fromarray(render_image.astype(np.uint8))
+            combined_image = Image.blend(gt_pil, render_pil, alpha=0.6)
             
-        #     combined_image.save(os.path.join(model_path, f"debug/debug_blended_{iteration}.png"))
-                # gt_image_cpu = (gt_image.permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
-                # gt_pil = Image.fromarray(gt_image_cpu)
-                # gt_pil.save(os.path.join(model_path, f"debug/gt_{iteration}.png"))
+            combined_image.save(os.path.join(model_path, f"debug/debug_blended_{iteration}.png"))
+            gt_image_cpu = (gt_image.permute(1, 2, 0).cpu().numpy() * 255.0).astype(np.uint8)
+            gt_pil = Image.fromarray(gt_image_cpu)
+            gt_pil.save(os.path.join(model_path, f"debug/gt_{iteration}.png"))
 
 
-                # if isinstance(render_image, torch.Tensor):
-                #     render_image_cpu = (render_image.permute(1, 2, 0).cpu().numpy()).astype(np.uint8)
-                # else:
-                #     render_image_cpu = render_image.astype(np.uint8)
-                # render_pil = Image.fromarray(render_image_cpu)
-                # render_pil.save(os.path.join(model_path, f"debug/render_{iteration}.png"))
+            if isinstance(render_image, torch.Tensor):
+                render_image_cpu = (render_image.permute(1, 2, 0).cpu().numpy()).astype(np.uint8)
+            else:
+                render_image_cpu = render_image.astype(np.uint8)
+            render_pil = Image.fromarray(render_image_cpu)
+            render_pil.save(os.path.join(model_path, f"debug/render_{iteration}.png"))
 
 
 

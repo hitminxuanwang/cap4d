@@ -5,8 +5,8 @@ from scipy.spatial.transform import Rotation
 
 # Parameter settings
 folder_path = './npzs'  # Replace with the path to your NPZ files folder
-output_npz = 'combined_animation.npz'  # Output animation NPZ filename
-resolution = np.array([1080, 1920])  # Camera resolution (height, width, adjustable)
+output_npz = 'combined_animation_smplx.npz'  # Output animation NPZ filename
+resolution = np.array([896, 896])  # Camera resolution (height, width, adjustable)
 
 # Get all NPZ files in the folder and sort them by filename (assuming names like frame_001.npz, sorted numerically)
 npz_files = sorted(glob.glob(os.path.join(folder_path, '*.npz')))

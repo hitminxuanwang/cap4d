@@ -118,6 +118,8 @@ def render_sequence(args):
 
     makedirs(render_path, exist_ok=True)
 
+
+    print("Starting rendering of {} frames...".format(len(scene.getTgtCameras())))
     views_loader = DataLoader(
         scene.getTgtCameras(), 
         batch_size=None, 
