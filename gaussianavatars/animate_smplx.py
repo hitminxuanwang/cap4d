@@ -132,7 +132,7 @@ def render_sequence(args):
     for idx, view in enumerate(tqdm(views_loader, desc="Rendering progress")):
 
         if gaussians.binding != None:
-            gaussians.select_mesh_by_timestep(view.timestep)
+            gaussians.select_mesh_by_timestep(view.timestep, animation=True)
 
         render_out = render(
             view, 
@@ -143,7 +143,7 @@ def render_sequence(args):
         
         rendering = render_out["render"]
 
-        print("Export", args.export_ply)
+        #print("Export", args.export_ply)
         if args.export_ply:
             ply_writer.update(gaussians)
 

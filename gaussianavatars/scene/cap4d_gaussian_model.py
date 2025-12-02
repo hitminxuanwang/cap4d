@@ -37,7 +37,7 @@ SMPL_TEMPLATE_PATH = "data/assets/smpl/smpl_template.obj"
 SMPLX_TEMPLATE_PATH = "data/assets/smplx/smplx_template.obj"
 
 #STD_DEFORM = 0.0108
-STD_DEFORM = 0.108 # scale up deformation to match SMPL scale
+STD_DEFORM = 0.0108 # scale up deformation to match SMPL scale
 
 
 class CAP4DGaussianModel(GaussianModel):
@@ -92,6 +92,12 @@ class CAP4DGaussianModel(GaussianModel):
             self.deform_net.model.model[-1].bias.data *= 0
 
         self.load_uv()
+
+        # self.codetalker_verts   = None   # (T, V, 3)
+        # self.codetalker_neutral = None # (1, V, 3)
+
+        self.codetalker_offsets = None      # (T, V_code, 3)
+        self.codetalker_vertex_count = 0    # V_code
 
     @torch.no_grad()
     def load_uv(self):
@@ -201,6 +207,52 @@ class CAP4DGaussianModel(GaussianModel):
         for k, v in self.flame_param.items():
             self.flame_param[k] = v.float().cuda()
 
+    def load_codetalker_vertices(self, npz_path: str):
+
+        import numpy as np
+
+        data = np.load(npz_path)
+        assert "verts" in data, f"{npz_path} error"
+        verts = data["verts"]  # (T, V_code, 3) 或 (T, V_code*3)
+        if verts.ndim == 2:
+            T, D = verts.shape
+            V_code = D // 3
+            verts = verts.reshape(T, V_code, 3)
+        elif verts.ndim == 3:
+            T, V_code, C = verts.shape
+            assert C == 3, f"unexpected verts shape: {verts.shape}"
+        else:
+            raise ValueError(f"unexpected verts shape: {verts.shape}")
+
+        V_flame = self.flame_verts.shape[0]
+        print(f"[CodeTalker]  CAP4D flame_verts V={V_flame}")
+        print(f"[CodeTalker]  CodeTalker verts V={V_code}")
+
+        assert V_code <= V_flame, f"CodeTalker error"
+
+        neutral = verts[0:1]    
+        print('neutral shape:', neutral.shape)  
+        print('Data shape', verts.shape)        
+
+        offsets = verts - neutral
+
+        self.codetalker_offsets = torch.from_numpy(offsets).float().cuda()
+        self.codetalker_vertex_count = V_code
+
+        # flame_template = self.flame_verts[None, ...].expand(T, -1, -1)  # (T, V_flame, 3)
+        # full_verts = flame_template.clone()                             # (T, V_flame, 3)
+
+        # verts_tensor = torch.from_numpy(verts).float()                  # (T, V_code, 3)
+        # full_verts[:, :V_code, :] = verts_tensor                       
+
+        # self.codetalker_verts = full_verts.cuda()                       # (T, V_flame, 3)
+
+
+        # self.codetalker_neutral = self.flame_verts[None, ...].cuda()    # (1, V_flame, 3)
+
+        # print(f"[CodeTalker] merged verts to V={V_flame}, T={T}")
+        # print(f"[CodeTalker] loaded verts from {npz_path}")
+
     def get_bbox_center(self):
         bbox_center = (self.verts.max(dim=1)[0] + self.verts.min(dim=1)[0]) / 2.
         return bbox_center
@@ -258,6 +310,83 @@ class CAP4DGaussianModel(GaussianModel):
         offsets = verts - neutral_verts
 
         self.update_mesh_properties(verts, offsets)
+
+    def select_codetalker_timestep(self, timestep: int):
+
+        assert self.codetalker_offsets is not None, \
+            "codetalker_offsets is None, load_codetalker_vertices(...)"
+
+        T, V_code, _ = self.codetalker_offsets.shape
+        t = max(0, min(int(timestep), T - 1))
+        self.timestep = t
+
+        neutral_verts, _ = self.flame_model({
+            "shape": self.flame_param["shape"],
+            "expr": self.flame_param["expr"][[0]] * 0.,
+            "rot": self.flame_param["rot"][[0]],
+            "tra": self.flame_param["tra"][[0]],
+            "eye_rot": self.flame_param["eye_rot"][[0]] * 0.,
+            "neck_rot": None,
+        })
+        # convert from p3d to opencv convention
+        neutral_verts[..., 1] = -neutral_verts[..., 1]
+        neutral_verts[..., 2] = -neutral_verts[..., 2]
+
+
+
+        #neutral_verts = self.flame_verts[None, ...].clone()   # (1, V_flame, 3)
+        verts = neutral_verts.clone()                         # (1, V_flame, 3)
+
+
+        offsets_face = self.codetalker_offsets[t:t+1]         # (1, V_code, 3)
+        verts[:, :V_code, :] -= offsets_face                  
+
+
+
+        lip_module = getattr(self.flame_model, "mouth", None)
+        if lip_module is None:
+            lip_module = getattr(self.flame_model, "lower_jaw", None)
+
+
+        lip_offset_up = self.codetalker_offsets[t:t+1, 3533:3533+1, :].to(verts.device)
+        lip_offset_down = self.codetalker_offsets[t:t+1, 3509:3509+1, :].to(verts.device)
+
+        mouth_count = 200
+        verts[:, V_code : V_code + mouth_count, :] -=  lip_offset_up
+        verts[:, V_code + mouth_count : V_code + 2 * mouth_count, :] -=  lip_offset_down
+
+        #print('lip_offset:', lip_offset.shape)
+        # if lip_offset is not None:
+        #     V_total = verts.shape[1]
+
+        #     mouth_count = 0
+        #     if hasattr(self.flame_model, "mouth"):
+        #         mouth_count = self.flame_model.mouth.vertices.shape[0]
+
+
+        #     lower_count = 0
+        #     if hasattr(self.flame_model, "lower_jaw"):
+        #         lower_count = self.flame_model.lower_jaw.vertices.shape[0]
+
+
+        #     start = V_code
+
+        #     if mouth_count > 0 and start < V_total:
+        #         end = min(start + mouth_count, V_total)
+        #         verts[:, start:end, :] = verts[:, start:end, :] + lip_offset
+        #         start = end
+
+        #     if lower_count > 0 and start < V_total:
+        #         end = min(start + lower_count, V_total)
+        #         verts[:, start:end, :] = verts[:, start:end, :] - lip_offset
+
+
+
+
+        offsets = verts - neutral_verts                       # (1, V_flame, 3)
+
+        self.update_mesh_properties(verts, offsets)
+
 
     def uv_remesh_flame_vertices(self, verts):
         verts_packed = verts[:, self.flame_faces]
@@ -1539,8 +1668,8 @@ class SMPLXGaussianModel(GaussianModel):
         #print('smplx betas shape', self.smplx_param['betas'].shape)
 
 
-        print('Selecting SMPLX mesh at timestep:', timestep)
-        print('SMPLX Param Size', self.smplx_param['betas'].shape)
+        # print('Selecting SMPLX mesh at timestep:', timestep)
+        # print('SMPLX Param Size', self.smplx_param['betas'].shape)
 
         if not animation:
             betas = self.smplx_param['betas'][timestep].unsqueeze(0)
@@ -1591,6 +1720,9 @@ class SMPLXGaussianModel(GaussianModel):
         #verts[..., 1] = -verts[..., 1]
         # verts[..., 1] = -verts[..., 1]
         # verts[..., 2] = -verts[..., 2]
+
+
+        #verts = smplx_output.vertices * 1.018
 
         offsets = torch.zeros_like(verts)
        
@@ -1803,9 +1935,9 @@ class SMPLXGaussianModel(GaussianModel):
         }
 
     def restore(self, chkpt, training_args=None):
-        self.smplx_param["betas"] = chkpt["betas"]
-        self.smplx_param["base_rot"] = chkpt["base_rot"]
-        self.deform_net.load_state_dict(chkpt["deform_net"])
+        # self.smplx_param["betas"] = chkpt["betas"]
+        # self.smplx_param["base_rot"] = chkpt["base_rot"]
+        # self.deform_net.load_state_dict(chkpt["deform_net"])
         super().restore(chkpt["gaussians"], training_args)
 
     # def load_smplx_params_from_npz(self, npz_path: str, timestep: int):

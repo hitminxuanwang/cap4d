@@ -837,11 +837,15 @@ def readCAP4DDrivingSequence(paths: Dict[str, Any], cam_id_offset=0):
     meshes = []
 
     for frame_id in tqdm(range(n_frames)):
+
+
         extr, rot, tra = reverse_transform(
             extr_list[frame_id],
             fit["rot"][frame_id],
             fit["tra"][frame_id],
         )
+
+
 
         intrinsics = np.array(
             [[fx_list[frame_id, 0], 0, cx_list[frame_id, 0]],

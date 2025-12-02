@@ -94,6 +94,8 @@ def render_sequence(args):
         shuffle=False,
     )
 
+    gaussians.load_codetalker_vertices('./codetalker_vertices.npz')
+
     loaded_iter, chkpt_path = searchForMaxIteration(model_path)
 
     assert loaded_iter is not None, f"No valid checkpoint found in {model_path}"
@@ -118,6 +120,11 @@ def render_sequence(args):
 
     makedirs(render_path, exist_ok=True)
 
+
+    orbit_scale = 0   
+
+   
+
     views_loader = DataLoader(
         scene.getTgtCameras(), 
         batch_size=None, 
@@ -127,10 +134,14 @@ def render_sequence(args):
     max_threads = 4
     worker_args = []
 
-    for idx, view in enumerate(tqdm(views_loader, desc="Rendering progress")):
+    ref_view =None
 
+    for idx, view in enumerate(tqdm(views_loader, desc="Rendering progress")):
+        
         if gaussians.binding != None:
-            gaussians.select_mesh_by_timestep(view.timestep)
+            #gaussians.select_mesh_by_timestep(view.timestep)
+            gaussians.select_codetalker_timestep(view.timestep)
+        
 
         render_out = render(
             view, 

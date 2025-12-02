@@ -205,3 +205,12 @@ remeshed_model_256.obj
 *.obj
 remeshed_model_256.obj
 *.obj
+data/assets/smplx/SMPLX_FEMALE.pkl
+data/assets/smplx/SMPLX_MALE.pkl
+data/assets/smplx/SMPLX_NEUTRAL.pkl
+data/assets/smplx/smplx_npz.zip
+data/assets/smplx/smplx_uv.objZone.Identifier
+data/assets/smplx/smplx_uv.pngZone.Identifier
+data/assets/flame/flame2023_no_jaw.pklZone.Identifier
+remeshed_model_256.obj
+remeshed_model_128.obj
